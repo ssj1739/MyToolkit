@@ -1,4 +1,5 @@
 ### My toolkit of generic data manipulation functions
+# Can be used in a variety of settings, but some are context-specific
 
 deduplicate <- function(x, sep="_"){
 # Deduplicates a vector - any values X in the vector that are the nth duplicate are replaced by X{sep}n
