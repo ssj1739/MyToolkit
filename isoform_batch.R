@@ -67,7 +67,7 @@ countIsos <- function(df, gene, tissue, ucsc_annot, scale=F){
 library("dplyr", quietly = T, warn.conflicts = F)
 library("readr", quietly = T, warn.conflicts = F)
 
-main(commandArgs(TRUE))
+#main(commandArgs(TRUE))
 
 
 
