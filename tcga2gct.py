@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/sbin/python3
 
 # Converting TCGA-style text files of gene expression from FireBrowse to GCT files
 
