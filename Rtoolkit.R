@@ -156,7 +156,7 @@ pullCBPdata <- function(genes, profile_type=c("EXPR", "COPY", "MUT")[1]){
   cancerstudies <- getCancerStudies(mycgds)[,1]
   ii = sapply(cancerstudies, function(x){
     prof <- getGeneticProfiles(mycgds, x)
-    return(prof[which(grepl("EXPR", prof$genetic_alteration_type)),1])
+    return(prof[which(grepl(profile_type, prof$genetic_alteration_type)),1])
   })
   studies <- names(ii[sapply(ii, length) > 0])
   
@@ -168,6 +168,7 @@ pullCBPdata <- function(genes, profile_type=c("EXPR", "COPY", "MUT")[1]){
     caselist = getCaseLists(mycgds, x)[1,1]
     df_list <- lapply(ii[[x]], function(y){
       df = getProfileData(x=mycgds, genes = genes, geneticProfiles = y, caseList = caselist)
+      df <- as.data.frame(apply(df, 2, as.numeric))
       df$Sample <- rownames(df)
       df$Profile <- y
       return(as_tibble(df))
@@ -1135,6 +1136,29 @@ find_propellers_graph <- function(gene, save=NULL, searchFor=NULL, annot=NULL, .
   }
   
   return(vn)
+}
+
+volcano_plot <- function(lm_df, static=F){
+  library(ggplot2)
+  library(magrittr)
+  
+  plot_df <- data.frame(
+    Gene=lm_df$Gene,
+    neg_log_pvalue = -log(lm_df$p.value),
+    log_fc = lm_df$EffectSize
+  )
+  
+  plot_df %<>%
+    mutate(Significant = -log(lm_df$q.value) > 3 & abs(lm_df$EffectSize) > 0.25)
+  
+  gg = ggplot(data=plot_df, aes(x=log_fc, y=neg_log_pvalue, fill=Significant, text=Gene)) +
+    geom_point()
+  
+  if(static){
+    return(gg)
+  }
+  
+  plotly::ggplotly(gg)
 }
 
 
