@@ -1107,7 +1107,7 @@ deep_network_graph <- function(query, type, cor_mat=NULL, searchFor, k=5, recurs
 find_propellers_graph <- function(gene, save=NULL, searchFor=NULL, annot=NULL, ...){
   # Define query family - default to propellers
   if(is.null(searchFor)){
-    searchFor <- readxl::read_xlsx("~/Downloads/SO-2639138G_Customer_File.xlsx")$GeneSymbol
+    searchFor <- readRDS("~/Data/propeller_list.RDS")
   }
   
   # Define links data frame
@@ -1750,11 +1750,11 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
   return_df$starred[ii] <- TRUE
   
   # CGCs are marked as TRUE
-  cgc <- as.character(read.csv('~/Desktop/cancer_gene_census_v2.csv')$Gene.Symbol)
+  cgc <- as.character(read.csv('~/Data/cancer_gene_census_v2.csv')$Gene.Symbol)
   return_df$isCGC <- ifelse(return_df$genes %in% cgc, TRUE, FALSE)
   
   # Propellers are marked TRUE
-  propeller_list <- readxl::read_xlsx("~/Downloads/SO-2639138G_Customer_File.xlsx")$GeneSymbol
+  propeller_list <- readRDS("~/Data/propeller_list.RDS")
   return_df$isPropeller <- ifelse(return_df$genes %in% propeller_list, TRUE, FALSE)
   
   # Additional Annotation
