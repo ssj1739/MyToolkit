@@ -66,6 +66,15 @@ read_norm_tcga <- function(file){
   return(dat)
 }
 
+read_clinical <- function(file){
+  library(readr)
+  clinical <- as.data.frame(t(read_delim(file, "\t", escape_double = FALSE, trim_ws = TRUE)))
+  colnames(clinical) <- sapply(clinical[1,], as.character)
+  clinical$Tumor_Sample_Barcode <- rownames(clinical)
+  clinical <- as.data.frame(clinical[-1,])
+  return(clinical)
+}
+
 write_gct <- function(X, file){
   library(readr)
   write_lines(c("#1.2", paste0(nrow(X), "\t", ncol(X)-2)), path = file)
@@ -73,57 +82,58 @@ write_gct <- function(X, file){
 }
 
 loadConstants <- function(){
-  load(file = '~/constants.RData', envir = .GlobalEnv)
+  load(file = '~/Data/constants.RData', envir = .GlobalEnv)
 }
 
 loadData <- function(type, gene=NULL, cell_line=NULL, clean_features=T, clean_celllines=T, convert_id=F){
   library("taigr")
   library('stringr')
   data <- switch(type,
-                 CRISPR = load.from.taiga(data.name='avana-broad-17q4-2d4b', data.version=4, data.file='gene_effect', quiet = T),
-                 Avana = load.from.taiga(data.name='avana-broad-17q4-2d4b', data.version=4, data.file='gene_effect', quiet = T),
-                 Broad_RNAi = t(load.from.taiga(data.name='achilles-demeter2-f87d', data.version=1, quiet = T)),
-                 Achilles = t(load.from.taiga(data.name='achilles-demeter2-f87d', data.version=1, quiet = T)),
-                 DRIVE = t(load.from.taiga(data.name='drive-ataris-scores-f72c', data.version=4, data.file='expanded_ATARiS_data', quiet = T)),
-                 Novartis_RNAi = t(load.from.taiga(data.name='drive-ataris-scores-f72c', data.version=4, data.file='expanded_ATARiS_data', quiet = T)),
-                 expression = load.from.taiga(data.name='ccle-rnaseq-expression-genes', data.version=3, quiet = T),
-                 mutation = load.from.taiga(data.name='pooled-mutation-6481', data.version=1, quiet = T),
-                 mut = load.from.taiga(data.name='pooled-mutation-6481', data.version=1, quiet = T),
-                 mut_damaging = load.from.taiga(data.name='damaging-729f', data.version=1, quiet = T),
-                 cn = load.from.taiga(data.name='gene-level-cn-87aa', data.version=3, data.file='gene_CN_SNP_priority', quiet = T),
-                 copynumber = load.from.taiga(data.name='gene-level-cn-87aa', data.version=3, data.file='gene_CN_SNP_priority', quiet = T),
-                 RNAseq = load.from.taiga(data.name='ccle-rnaseq-expression-genes', data.version=3, quiet = T),
-                 DRIVE_RSA = t(load.from.taiga(data.name='drive-rsa-scores-5668', data.version=1, quiet = T)),
-                 drive_rsa = t(load.from.taiga(data.name='drive-rsa-scores-5668', data.version=1, quiet = T)),
-                 DRIVE_rsa = t(load.from.taiga(data.name='drive-rsa-scores-5668', data.version=1, quiet = T)),
-                 chromatin = load.from.taiga(data.name='ccle-global-chromatin-prof-f49b', data.version=3, quiet = T),
-                 emt = load.from.taiga(data.name='ccle-emt-score-b0da', data.version=1, quiet = T),
-                 EMT = load.from.taiga(data.name='ccle-emt-score-b0da', data.version=1, quiet = T),
-                 GSEA = t(load.from.taiga(data.name='ssgsea-enrichment-scores-for-msigdb-h-using-ccle-rnaseq-expression', data.version=1, quiet = T)),
-                 gsea_hallmarks = t(load.from.taiga(data.name='ssgsea-enrichment-scores-for-msigdb-h-using-ccle-rnaseq-expression', data.version=1, quiet = T)),
-                 methylation = load.from.taiga(data.name='rrbs-4b29', data.version=2, quiet = T),
-                 rrbs = load.from.taiga(data.name='rrbs-4b29', data.version=2, quiet = T),
-                 metabolomics = load.from.taiga(data.name='metabolomics-cd0c', data.version=2, quiet = T),
-                 metabolome = load.from.taiga(data.name='metabolomics-cd0c', data.version=2, quiet = T),
-                 demeter2 = t(load.from.taiga(data.name='demeter2-combined-dc9c', data.version=2, data.file='gene_means_proc', quiet = T)),
-                 Combined_DEMETER2 = t(load.from.taiga(data.name='demeter2-combined-dc9c', data.version=2, data.file='gene_means_proc', quiet = T)),
-                 Combined = t(load.from.taiga(data.name='demeter2-combined-dc9c', data.version=2, data.file='gene_means_proc', quiet = T)),
-                 demeter2_combined =  t(load.from.taiga(data.name='demeter2-combined-dc9c', data.version=2, data.file='gene_means_proc', quiet = T)),
-                 Achilles_DEMETER2 = t(load.from.taiga(data.name='demeter2-achilles-5386', data.version=2, data.file='gene_means_proc', quiet = T)),
-                 DRIVE_DEMETER2 = t(load.from.taiga(data.name='demeter2-drive-0591', data.version=2, data.file='gene_means_proc')),
-                 Position = load.from.taiga(data.name='gene-cytogenic-position-2b92', data.version=2)
+                 CRISPR = load.from.taiga(data.name='avana-broad-17q4-2d4b', data.file='gene_effect', quiet = T),
+                 Avana = load.from.taiga(data.name='avana-broad-17q4-2d4b', data.file='gene_effect', quiet = T),
+                 Broad_RNAi = t(load.from.taiga(data.name='achilles-demeter2-f87d', quiet = T)),
+                 Achilles = t(load.from.taiga(data.name='achilles-demeter2-f87d', quiet = T)),
+                 DRIVE = t(load.from.taiga(data.name='drive-ataris-scores-f72c', data.file='expanded_ATARiS_data', quiet = T)),
+                 Novartis_RNAi = t(load.from.taiga(data.name='drive-ataris-scores-f72c', data.file='expanded_ATARiS_data', quiet = T)),
+                 expression = load.from.taiga(data.name='ccle-rnaseq-expression-genes', quiet = T),
+                 mutation = load.from.taiga(data.name='pooled-mutation-6481', quiet = T),
+                 mut = load.from.taiga(data.name='pooled-mutation-6481', quiet = T),
+                 mut_damaging = load.from.taiga(data.name='damaging-729f', quiet = T),
+                 cn = load.from.taiga(data.name='gene-level-cn-87aa', data.file='gene_CN_SNP_priority', quiet = T),
+                 copynumber = load.from.taiga(data.name='gene-level-cn-87aa', data.file='gene_CN_SNP_priority', quiet = T),
+                 RNAseq = load.from.taiga(data.name='ccle-rnaseq-expression-genes', quiet = T),
+                 DRIVE_RSA = t(load.from.taiga(data.name='drive-rsa-scores-5668', quiet = T)),
+                 drive_rsa = t(load.from.taiga(data.name='drive-rsa-scores-5668', quiet = T)),
+                 DRIVE_rsa = t(load.from.taiga(data.name='drive-rsa-scores-5668', quiet = T)),
+                 chromatin = load.from.taiga(data.name='ccle-global-chromatin-prof-f49b', quiet = T),
+                 emt = load.from.taiga(data.name='ccle-emt-score-b0da', quiet = T),
+                 EMT = load.from.taiga(data.name='ccle-emt-score-b0da', quiet = T),
+                 GSEA = t(load.from.taiga(data.name='ssgsea-enrichment-scores-for-msigdb-h-using-ccle-rnaseq-expression', quiet = T)),
+                 gsea_hallmarks = t(load.from.taiga(data.name='ssgsea-enrichment-scores-for-msigdb-h-using-ccle-rnaseq-expression', quiet = T)),
+                 methylation = load.from.taiga(data.name='rrbs-4b29', quiet = T),
+                 rrbs = load.from.taiga(data.name='rrbs-4b29', quiet = T),
+                 metabolomics = load.from.taiga(data.name='metabolomics-cd0c', quiet = T),
+                 metabolome = load.from.taiga(data.name='metabolomics-cd0c', quiet = T),
+                 demeter2 = t(load.from.taiga(data.name='demeter2-combined-dc9c', data.file='gene_means_proc', quiet = T)),
+                 Combined_DEMETER2 = t(load.from.taiga(data.name='demeter2-combined-dc9c', data.file='gene_means_proc', quiet = T)),
+                 Combined = t(load.from.taiga(data.name='demeter2-combined-dc9c', data.file='gene_means_proc', quiet = T)),
+                 Combined_RNAi = t(load.from.taiga(data.name='demeter2-combined-dc9c', data.file='gene_means_proc', quiet = T)),
+                 demeter2_combined =  t(load.from.taiga(data.name='demeter2-combined-dc9c', data.file='gene_means_proc', quiet = T)),
+                 Achilles_DEMETER2 = t(load.from.taiga(data.name='demeter2-achilles-5386', data.file='gene_means_proc', quiet = T)),
+                 DRIVE_DEMETER2 = t(load.from.taiga(data.name='demeter2-drive-0591', data.file='gene_means_proc')),
+                 Position = load.from.taiga(data.name='gene-cytogenic-position-2b92'),
+                 GDSC = load.from.taiga(data.name='gdsc-ic50-ccle-aligned', data.file='data'),
+                 IC50 = load.from.taiga(data.name='gdsc-ic50-ccle-aligned', data.file='data'),
+                 miRNA = load.from.taiga(data.name='mirna-expression-2c5f', data.version=2)
   )
   force(data)
   if(convert_id || length(grep("DEMETER2", ignore.case = T, type))==1 || length(grep("combined", ignore.case = T, type))==1 ){
-    colnames(data) <- convert_ids(sapply(colnames(data), strsplit2, n=1, split="[&, ]"))
+    colnames(data) <- as.character(sapply(colnames(data), strsplit2, n=1, split="[&, ]"))
   }
   if(clean_features){
     colnames(data) <- sapply(colnames(data), strsplit2, split=" ", n=1)
   }
   if(clean_celllines){
-    if(type %in% c("cn", "copynumber")){
-      rownames(data) <- sapply(rownames(data), strsplit2, split="snp_", n=2)
-    }
     rownames(data) <- sapply(rownames(data), str_to_upper)
   }
   if(!is.null(cell_line)){
@@ -131,8 +141,12 @@ loadData <- function(type, gene=NULL, cell_line=NULL, clean_features=T, clean_ce
       warning(paste0("Cell line(s) ", cell_line, "is not in dataset ", type, ".  Returned NULL instead."))
       return(NULL)
     }
-    data <- data[grep(cell_line, rownames(data)),]
-    if(nrow(data)==0){
+    if(length(cell_line) > 1){
+      data <- data[match(cell_line, rownames(data)),]
+    }else{
+      data <- data[grep(cell_line, rownames(data)),]
+    }
+    if(length(data)==0 & !is.null(data)){
       warning("No cell lines match query.  Returned NULL instead.")
       return(NULL)
     }
@@ -143,8 +157,21 @@ loadData <- function(type, gene=NULL, cell_line=NULL, clean_features=T, clean_ce
       return(NULL)
     }
     data <- data[,colnames(data) %in% gene]
+    return(data)
   }
-  return(data)
+  return(as.data.frame(data))
+}
+
+cell_line_status <- function(cell_line, type="RNAseq", gene=NULL){
+  data=loadData(type = type)
+  ii = grepl(pattern = cell_line, rownames(data), ignore.case = T)
+  if(sum(ii)==0){
+    stop("Cell line not found!")
+  }
+  if(!gene %in% colnames(data)){
+    stop("Invalid gene!")
+  }
+  return(data[ii, gene])
 }
 
 pullCBPdata <- function(genes, profile_type=c("EXPR", "COPY", "MUT")[1]){
@@ -190,7 +217,7 @@ write_fasta <- function(file = "", seq, name, append=FALSE){
   write_lines(path = file, x=c(paste(">", name), seq, "\n"), append = append)
 }
 
-readMappings <- function(file, sep = "\t", IDsep = ",") {
+read_mappings <- function(file, sep = "\t", IDsep = ",") {
   a <- read.delim(file = file, header = FALSE,
                   quote = "", sep = sep, colClasses = "character")
   
@@ -453,7 +480,7 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
   }
 }
 
-waterfallplot <- function(gene, cls=NULL, data.set="CRISPR", annotate.by="tissue", annotate.gene=NULL, label_bars=F, reorder=T, static=F){
+waterfallplot <- function(gene, cls=NULL, data.set="CRISPR", annotate.by="tissue", annotate.gene=NULL, label_bars=F, static=F, legend=T){
   library("taigr")
   library("ggplot2")
   library("plotly")
@@ -461,13 +488,16 @@ waterfallplot <- function(gene, cls=NULL, data.set="CRISPR", annotate.by="tissue
   
   gene_effect <- loadData(gene = gene, type=data.set)
   cls = names(gene_effect)
-  tissues <- sapply(cls, strsplit2, split="_", n=2)
+  tissues <- sapply(cls, function(x){ 
+    s=strsplit(x, split = "_")[[1]][-1]
+    return(paste(s, collapse=" "))
+  })
   
   annotate.gene <- ifelse(is.null(annotate.gene), gene, annotate.gene)
   gene_annot <- NA
   if(annotate.by %in% c("mutation", "mut")){
     library(readr)
-    ccle_binary <- as.data.frame(read_delim("~/Downloads/tmp/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
+    ccle_binary <- as.data.frame(read_delim("~/Data/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
                                             "\t", escape_double = FALSE, col_types = cols(Description = col_skip()), 
                                             trim_ws = TRUE, skip = 2))
     gene_annot <- ifelse(ccle_binary[match(paste0(annotate.gene, "_", "MUT"), ccle_binary$Name),match(cls, colnames(ccle_binary), nomatch = 1)]==1, 1, 0) 
@@ -480,7 +510,7 @@ waterfallplot <- function(gene, cls=NULL, data.set="CRISPR", annotate.by="tissue
     # gene_annot <- as.logical(a+b)
   }else if(annotate.by %in% c("copy number", "cn", "cnv") ){
     library(readr)
-    ccle_binary <- as.data.frame(read_delim("~/Downloads/tmp/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
+    ccle_binary <- as.data.frame(read_delim("~/Data/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
                                             "\t", escape_double = FALSE, col_types = cols(Description = col_skip()), 
                                             trim_ws = TRUE, skip = 2))
     
@@ -490,7 +520,7 @@ waterfallplot <- function(gene, cls=NULL, data.set="CRISPR", annotate.by="tissue
     # gene_annot <- round(ccle_copynumber[match(cls, rownames(ccle_copynumber)), match(gene, colnames(ccle_copynumber))])
   }else if(annotate.by %in% c("deletion", "del")){
     library(readr)
-    ccle_binary <- as.data.frame(read_delim("~/Downloads/tmp/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
+    ccle_binary <- as.data.frame(read_delim("~/Data/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
                                             "\t", escape_double = FALSE, col_types = cols(Description = col_skip()), 
                                             trim_ws = TRUE, skip = 2))
     
@@ -512,17 +542,20 @@ waterfallplot <- function(gene, cls=NULL, data.set="CRISPR", annotate.by="tissue
     context=as.factor(as.character(gene_annot))
   )
   
-  if(reorder==T){
-    g <- ggplot(df, aes(x=reorder(names, -scores), y=scores, fill=context))
-  }else{
-    g <- ggplot(df, aes(x=names, y=scores, fill=context))
-  }
+  g <- ggplot(df, aes(x=reorder(names, -scores), y=scores, fill=context))
   
   g <- g + geom_bar(stat = 'identity', na.rm = T, aes(text=sprintf("Cell line: %s<br>Score: %s<br>Context: %s", names, scores, context))) +
     scale_fill_discrete(drop=F) +
     labs(x="Cell line", y="Dependency") +
     theme(axis.text.x=element_text(angle=45, hjust=0, size=4), legend.text = element_text(size = 7)) +
     ggtitle(paste0("Waterfall Plot - ", gene, " in ", data.set))
+  
+  if(!legend)
+    g <- g+theme(legend.position = 'none')
+  if(!label_bars)
+    g <- g+theme(axis.text.x = element_blank())
+  if(static)
+    return(g)
   return(ggplotly(g))  
 }
 
@@ -550,7 +583,7 @@ drive_waterfallplot <- function(gene, cls=NULL, annotate.by='tissue', annotate.g
   
   if(annotate.by %in% c("mutation", "mut")){
     library(readr)
-    ccle_binary <- as.data.frame(read_delim("~/Downloads/tmp/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
+    ccle_binary <- as.data.frame(read_delim("~/Data/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
                                             "\t", escape_double = FALSE, col_types = cols(Description = col_skip()), 
                                             trim_ws = TRUE, skip = 2))
     gene_annot <- ccle_binary[grep(glob2rx(paste0(annotate.gene, "*_MUT")), ccle_binary$Name),match(cls, colnames(ccle_binary), nomatch = 1)]
@@ -564,7 +597,7 @@ drive_waterfallplot <- function(gene, cls=NULL, annotate.by='tissue', annotate.g
     # gene_annot <- as.logical(a+b)
   }else if(annotate.by %in% c("copy number", "cn", "cnv") ){
     library(readr)
-    ccle_binary <- as.data.frame(read_delim("~/Downloads/tmp/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
+    ccle_binary <- as.data.frame(read_delim("~/Data/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
                                             "\t", escape_double = FALSE, col_types = cols(Description = col_skip()), 
                                             trim_ws = TRUE, skip = 2))
     
@@ -575,7 +608,7 @@ drive_waterfallplot <- function(gene, cls=NULL, annotate.by='tissue', annotate.g
     # gene_annot <- round(ccle_copynumber[match(cls, rownames(ccle_copynumber)), match(gene, colnames(ccle_copynumber))])
   }else if(annotate.by %in% c("deletion", "del")){
     library(readr)
-    ccle_binary <- as.data.frame(read_delim("~/Downloads/tmp/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
+    ccle_binary <- as.data.frame(read_delim("~/Data/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
                                             "\t", escape_double = FALSE, col_types = cols(Description = col_skip()), 
                                             trim_ws = TRUE, skip = 2))
     
@@ -588,7 +621,7 @@ drive_waterfallplot <- function(gene, cls=NULL, annotate.by='tissue', annotate.g
     color_by_discrete=F
   }else if(annotate.by %in% c('any', 'all')){
     library(readr)
-    ccle_binary <- as.data.frame(read_delim("~/Downloads/tmp/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
+    ccle_binary <- as.data.frame(read_delim("~/Data/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
                                             "\t", escape_double = FALSE, col_types = cols(Description = col_skip()), 
                                             trim_ws = TRUE, skip = 2))
     gene_annot <- ccle_binary[grep(paste0(annotate.gene,"[[:punct:]]"), ccle_binary$Name),match(cls, colnames(ccle_binary), nomatch=1)]
@@ -640,7 +673,7 @@ drive_waterfallplot <- function(gene, cls=NULL, annotate.by='tissue', annotate.g
   return(subplot(p[1:2], titleY=TRUE, nrows=2, shareX=T))
 }
 
-comparison_waterfallplot <- function(gene, annotate.by="tissue", annotate.gene=NULL, annotate.custom=NULL, label_bars=F, reorder.by="DRIVE", static=F, color_by_discrete=T){
+comparison_waterfallplot <- function(gene, annotate.by="tissue", annotate.gene=NULL, annotate.custom=NULL, label_bars=F, reorder.by="DRIVE", static=F, color_by_discrete=T, legend=T){
   library("taigr")
   library('readr')
   library("ggplot2")
@@ -650,7 +683,9 @@ comparison_waterfallplot <- function(gene, annotate.by="tissue", annotate.gene=N
   gene_effect_avana <- loadData(type = "Avana")
   gene_effect_achilles <- loadData(type="Achilles")
   gene_effect_drive <- loadData(type="DRIVE")
-  gene_effect_combined <- loadData(type="demeter2_combined")
+  gene_effect_combined <- loadData(type="Combined")
+  
+  which.plots <- c(Avana=gene %in% colnames(gene_effect_avana), Achilles=gene %in% colnames(gene_effect_achilles), DRIVE=gene %in% colnames(gene_effect_drive), Combined=gene %in% colnames(gene_effect_combined))
   
   
   cls <- switch(reorder.by,
@@ -660,7 +695,7 @@ comparison_waterfallplot <- function(gene, annotate.by="tissue", annotate.gene=N
                 CRISPR=rownames(gene_effect_avana),
                 Combined=rownames(gene_effect_combined))
   
-  nplots <- gene %in% colnames(gene_effect_avana) + gene %in% colnames(gene_effect_achilles) + gene %in% colnames(gene_effect_drive) + gene %in% colnames(gene_effect_combined)
+  nplots <- sum(which.plots)
   
   gene_annot.by_tissue=sapply(cls, function(x){ # By default, annotate by tissue/lineage
     s=strsplit(x, split = "_")[[1]][-1]
@@ -675,7 +710,7 @@ comparison_waterfallplot <- function(gene, annotate.by="tissue", annotate.gene=N
   
   if(annotate.by %in% c("mutation", "mut")){
     library(readr)
-    ccle_binary <- as.data.frame(read_delim("~/Downloads/tmp/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
+    ccle_binary <- as.data.frame(read_delim("~/Data/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
                                             "\t", escape_double = FALSE, col_types = cols(Description = col_skip()), 
                                             trim_ws = TRUE, skip = 2))
     gene_annot <- ccle_binary[grep(glob2rx(paste0(annotate.gene, "*_MUT")), ccle_binary$Name),match(cls, colnames(ccle_binary), nomatch = 1)]
@@ -689,7 +724,7 @@ comparison_waterfallplot <- function(gene, annotate.by="tissue", annotate.gene=N
     # gene_annot <- as.logical(a+b)
   }else if(annotate.by %in% c("copy number", "cn", "cnv") ){
     library(readr)
-    ccle_binary <- as.data.frame(read_delim("~/Downloads/tmp/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
+    ccle_binary <- as.data.frame(read_delim("~/Data/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
                                             "\t", escape_double = FALSE, col_types = cols(Description = col_skip()), 
                                             trim_ws = TRUE, skip = 2))
     
@@ -700,7 +735,7 @@ comparison_waterfallplot <- function(gene, annotate.by="tissue", annotate.gene=N
     # gene_annot <- round(ccle_copynumber[match(cls, rownames(ccle_copynumber)), match(gene, colnames(ccle_copynumber))])
   }else if(annotate.by %in% c("deletion", "del")){
     library(readr)
-    ccle_binary <- as.data.frame(read_delim("~/Downloads/tmp/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
+    ccle_binary <- as.data.frame(read_delim("~/Data/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
                                             "\t", escape_double = FALSE, col_types = cols(Description = col_skip()), 
                                             trim_ws = TRUE, skip = 2))
     
@@ -713,7 +748,7 @@ comparison_waterfallplot <- function(gene, annotate.by="tissue", annotate.gene=N
     color_by_discrete=F
   }else if(annotate.by %in% c('any', 'all')){
     library(readr)
-    ccle_binary <- as.data.frame(read_delim("~/Downloads/tmp/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
+    ccle_binary <- as.data.frame(read_delim("~/Data/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
                                             "\t", escape_double = FALSE, col_types = cols(Description = col_skip()), 
                                             trim_ws = TRUE, skip = 2))
     gene_annot <- ccle_binary[grep(paste0(annotate.gene,"[[:punct:]]"), ccle_binary$Name),match(cls, colnames(ccle_binary), nomatch=1)]
@@ -728,13 +763,18 @@ comparison_waterfallplot <- function(gene, annotate.by="tissue", annotate.gene=N
     gene_annot <- as.factor(as.character(gene_annot.by_tissue))
   }
   
+  drive_scores = gene_effect_drive[match(cls, rownames(gene_effect_drive)),match(gene, colnames(gene_effect_drive))]
+  avana_scores=gene_effect_avana[match(cls, rownames(gene_effect_avana)),match(gene, colnames(gene_effect_avana))]
+  achilles_scores=gene_effect_achilles[match(cls, rownames(gene_effect_achilles)),match(gene, colnames(gene_effect_achilles))]
+  combined_scores=gene_effect_combined[match(cls, rownames(gene_effect_combined)),match(gene, colnames(gene_effect_combined))]
+  
   df <- data.frame(
     names=cls, 
     clean_names = sapply(cls, strsplit2, split="_", n=1),
-    drive_scores=gene_effect_drive[match(cls, rownames(gene_effect_drive)),match(gene, colnames(gene_effect_drive))], 
-    avana_scores=gene_effect_avana[match(cls, rownames(gene_effect_avana)),match(gene, colnames(gene_effect_avana))],
-    achilles_scores=gene_effect_achilles[match(cls, rownames(gene_effect_achilles)),match(gene, colnames(gene_effect_achilles))],
-    combined_scores=gene_effect_combined[match(cls, rownames(gene_effect_combined)),match(gene, colnames(gene_effect_combined))],
+    drive_scores=ifelse(is.null(drive_scores), NA, drive_scores), 
+    avana_scores=ifelse(is.null(avana_scores), NA, avana_scores),
+    achilles_scores=ifelse(is.null(achilles_scores), NA, achilles_scores),
+    combined_scores=ifelse(is.null(combined_scores), NA, combined_scores),
     context=gene_annot
   )
   
@@ -782,6 +822,9 @@ comparison_waterfallplot <- function(gene, annotate.by="tissue", annotate.gene=N
     if(color_by_discrete){
       x <- x+scale_fill_discrete(drop=F)
     }
+    if(!legend){
+      x <- x+theme(legend.position = 'none')
+    }
     return(x)
   })
   
@@ -802,26 +845,24 @@ comparison_waterfallplot_expression <- function(gene, ...){
   subplot(comparison_waterfallplot(gene, ...), p, titleY = T)
 }
 
-comparison_dataframe <- function(gene, annotate.by="tissue", annotate.gene=NULL, label_bars=F, static=F, reorder.by="DRIVE"){
+comparison_dataframe <- function(gene, annotate.by="tissue", annotate.gene=NULL, reorder.by="DRIVE"){
   library("taigr")
   library('readr')
   stopifnot(length(gene)>0)
   
-  gene_effect_avana <- loadData(type = "Avana")
-  gene_effect_achilles <- loadData(type="Achilles")
-  gene_effect_drive <- loadData(type="DRIVE")
-  gene_effect_combined <- loadData(type="RNAi_combined")
-  
-  colnames(gene_effect_combined) <- convert_ids(colnames(gene_effect_combined))
+  gene_effect_avana <- loadData(type = "Avana", gene=gene)
+  gene_effect_achilles <- loadData(type="Achilles", gene=gene)
+  gene_effect_drive <- loadData(type="DRIVE", gene=gene)
+  gene_effect_combined <- loadData(type="Combined", gene=gene)
   
   cls <- switch(reorder.by,
-                DRIVE=rownames(gene_effect_drive),
-                Achilles=rownames(gene_effect_achilles),
-                Avana=rownames(gene_effect_avana),
-                CRISPR=rownames(gene_effect_avana),
-                Combined=rownames(gene_effect_combined))
+                DRIVE=names(gene_effect_drive),
+                Achilles=names(gene_effect_achilles),
+                Avana=names(gene_effect_avana),
+                CRISPR=names(gene_effect_avana),
+                Combined=names(gene_effect_combined))
   
-  nplots <- gene %in% colnames(gene_effect_avana) + gene %in% colnames(gene_effect_achilles) + gene %in% colnames(gene_effect_drive) + gene %in% colnames(gene_effect_combined)
+  #nplots <- gene %in% colnames(gene_effect_avana) + gene %in% colnames(gene_effect_achilles) + gene %in% colnames(gene_effect_drive) + gene %in% colnames(gene_effect_combined)
   
   gene_annot.by_tissue=sapply(cls, function(x){ # By default, annotate by tissue/lineage
     s=strsplit(x, split = "_")[[1]][-1]
@@ -836,7 +877,7 @@ comparison_dataframe <- function(gene, annotate.by="tissue", annotate.gene=NULL,
   
   if(annotate.by %in% c("mutation", "mut")){
     library(readr)
-    ccle_binary <- as.data.frame(read_delim("~/Downloads/tmp/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
+    ccle_binary <- as.data.frame(read_delim("~/Data/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
                                             "\t", escape_double = FALSE, col_types = cols(Description = col_skip()), 
                                             trim_ws = TRUE, skip = 2))
     gene_annot <- ccle_binary[grep(glob2rx(paste0(annotate.gene, "*_MUT")), ccle_binary$Name),match(cls, colnames(ccle_binary), nomatch = 1)]
@@ -850,9 +891,8 @@ comparison_dataframe <- function(gene, annotate.by="tissue", annotate.gene=NULL,
     # gene_annot <- as.logical(a+b)
   }else if(annotate.by %in% c("copy number", "cn", "cnv") ){
     library(readr)
-    ccle_binary <- as.data.frame(read_delim("~/Downloads/tmp/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
-                                            "\t", escape_double = FALSE, col_types = cols(Description = col_skip()), 
-                                            trim_ws = TRUE, skip = 2))
+    ccle_binary <- as.data.frame(read_delim("~/Data/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
+                                            "\t", escape_double = FALSE, col_types = cols(Description = col_skip()), trim_ws = TRUE, skip = 2))
     
     gene_annot <- ccle_binary[grep(glob2rx(paste0(annotate.gene, "*_AMP")), ccle_binary$Name),match(cls, colnames(ccle_binary), nomatch = 1)]
     gene_annot <- apply(gene_annot, 2, function(x) any(as.logical(as.numeric(x))))
@@ -861,7 +901,7 @@ comparison_dataframe <- function(gene, annotate.by="tissue", annotate.gene=NULL,
     # gene_annot <- round(ccle_copynumber[match(cls, rownames(ccle_copynumber)), match(gene, colnames(ccle_copynumber))])
   }else if(annotate.by %in% c("deletion", "del")){
     library(readr)
-    ccle_binary <- as.data.frame(read_delim("~/Downloads/tmp/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
+    ccle_binary <- as.data.frame(read_delim("~/Data/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
                                             "\t", escape_double = FALSE, col_types = cols(Description = col_skip()), 
                                             trim_ws = TRUE, skip = 2))
     
@@ -874,7 +914,7 @@ comparison_dataframe <- function(gene, annotate.by="tissue", annotate.gene=NULL,
     color_by_discrete=F
   }else if(annotate.by %in% c('any', 'all')){
     library(readr)
-    ccle_binary <- as.data.frame(read_delim("~/Downloads/tmp/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
+    ccle_binary <- as.data.frame(read_delim("~/Data/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
                                             "\t", escape_double = FALSE, col_types = cols(Description = col_skip()), 
                                             trim_ws = TRUE, skip = 2))
     gene_annot <- ccle_binary[grep(paste0(annotate.gene,"[[:punct:]]"), ccle_binary$Name),match(cls, colnames(ccle_binary), nomatch=1)]
@@ -892,10 +932,10 @@ comparison_dataframe <- function(gene, annotate.by="tissue", annotate.gene=NULL,
   df <- data.frame(
     names=cls, 
     clean_names = sapply(cls, strsplit2, split="_", n=1),
-    drive_scores=gene_effect_drive[match(cls, rownames(gene_effect_drive)),match(gene, colnames(gene_effect_drive))], 
-    avana_scores=gene_effect_avana[match(cls, rownames(gene_effect_avana)),match(gene, colnames(gene_effect_avana))],
-    achilles_scores=gene_effect_achilles[match(cls, rownames(gene_effect_achilles)),match(gene, colnames(gene_effect_achilles))],
-    combined_scores=gene_effect_combined[match(cls, rownames(gene_effect_combined)),match(gene, colnames(gene_effect_combined))],
+    drive_scores=gene_effect_drive[match(cls, names(gene_effect_drive))], 
+    avana_scores=gene_effect_avana[match(cls, names(gene_effect_avana))],
+    achilles_scores=gene_effect_achilles[match(cls, names(gene_effect_achilles))],
+    combined_scores=gene_effect_combined[match(cls, names(gene_effect_combined))],
     context=gene_annot
   )
   
@@ -910,9 +950,10 @@ network_graph <- function(gene, cor_mat="DRIVE", r_cutoff=0.15, k=5, save=NULL){
   if(is.character(cor_mat)){
     type=cor_mat
     cor_mat <- switch(cor_mat,
-                      DRIVE=readRDS("~/Documents/wdr-data/correlations/drive_cor_spearman.RDS"),
-                      Achilles=readRDS("~/Documents/wdr-data/correlations/achilles_cor_spearman.RDS"),
-                      CRISPR=readRDS("~/Documents/wdr-data/correlations/crispr_cor_spearman.RDS")
+                      DRIVE=load.from.taiga(data.name='drive-spearman-4707'),
+                      Achilles=load.from.taiga(data.name='achilles-spearman-1a1a'),
+                      CRISPR=load.from.taiga(data.name='crispr-spearman-254d'),
+                      Combined=load.from.taiga(data.name='combined-pearson-6b02')
     )  
   }
   
@@ -942,8 +983,8 @@ network_graph <- function(gene, cor_mat="DRIVE", r_cutoff=0.15, k=5, save=NULL){
   
   # Create node list manually:
   library(taigr)
-  propeller_list <- readxl::read_xlsx("~/Downloads/SO-2639138G_Customer_File.xlsx")$GeneSymbol
-  cgc <- read.csv(file = "~/Documents/wdr-data/cancer_gene_census.csv")$Gene.Symbol
+  propeller_list <- readRDS("~/Data/propeller_list.RDS")
+  cgc <- read.csv(file = "~/Data/cancer_gene_census_v2.csv")$Gene.Symbol
   stringdb <- load.from.taiga(data.name='stringdb-neighboring-genes-ensp-converted-tohgnc-symbol', data.version=1)
   
   is.propeller <- genes %in% propeller_list
@@ -1138,7 +1179,7 @@ find_propellers_graph <- function(gene, save=NULL, searchFor=NULL, annot=NULL, .
   return(vn)
 }
 
-volcano_plot <- function(lm_df, static=F){
+volcano_plot <- function(lm_df, static=F, label=NULL){
   library(ggplot2)
   library(magrittr)
   
@@ -1153,6 +1194,14 @@ volcano_plot <- function(lm_df, static=F){
   
   gg = ggplot(data=plot_df, aes(x=log_fc, y=neg_log_pvalue, fill=Significant, text=Gene)) +
     geom_point()
+  
+  if(!is.null(label) & length(label)==nrow(plot_df)){
+    gg + 
+      geom_text(aes(label=label))
+    print("Added labels")
+  }else{
+    warning("No labels!")
+  }
   
   if(static){
     return(gg)
@@ -1260,7 +1309,7 @@ run_lm_stats_limma <- function(mat, vec, covars = NULL, weights = NULL, target_t
   return(results)
 }
 
-find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, from=c("DRIVE", "Achilles", "CRISPR", "Combined"), to=c("mutation", "copy number", "expression", 'dependency', 'methylation', 'chromatin', 'metabolome', 'gsea_hallmarks'), annotate=T, manual_dependency=NULL){
+find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, from=c("DRIVE", "Achilles", "CRISPR", "Combined"), to=c("mutation", "copy number", "expression", 'dependency', 'methylation', 'chromatin', 'metabolome', 'gsea_hallmarks', 'bioplex'), annotate=T, manual_dependency=NULL, method='spearman'){
   return_df <- data.frame()
   dependency_data <- NULL
   if(!is.null(manual_dependency))
@@ -1278,7 +1327,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
       cls <- intersect(names(dependency_data[[x]]), rownames(dependency_else[[x]]))
       if(length(cls)==0)
         return(NULL)
-      cc = cor(dependency_data[[x]][cls], dependency_else[[x]][cls,], use='pairwise.complete.obs')
+      cc = cor(dependency_data[[x]][cls], dependency_else[[x]][cls,], use='pairwise.complete.obs', method='spearman')
       ii <- c(order(cc, decreasing = T)[1:k], order(cc, decreasing=F)[k:1])
       data.frame(
         genes = colnames(cc)[ii],
@@ -1296,7 +1345,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
       cls <- intersect(names(dependency_data[[x]]), rownames(Achilles))
       if(length(cls)==0)
         return(NULL)
-      cc = cor(dependency_data[[x]][cls], Achilles[cls,], use='complete')
+      cc = cor(dependency_data[[x]][cls], Achilles[cls,], use='complete', method=method)
       ii <- c(order(cc, decreasing = T)[1:k], order(cc, decreasing=F)[k:1])
       data.frame(
         genes = colnames(cc)[ii],
@@ -1314,7 +1363,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
       cls <- intersect(names(dependency_data[[x]]), rownames(CRISPR))
       if(length(cls)==0)
         return(NULL)
-      cc = cor(dependency_data[[x]][cls], CRISPR[cls,], use='complete')
+      cc = cor(dependency_data[[x]][cls], CRISPR[cls,], use='complete', method=method)
       ii <- c(order(cc, decreasing = T)[1:k], order(cc, decreasing=F)[k:1])
       data.frame(
         genes = colnames(cc)[ii],
@@ -1333,7 +1382,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
       cls <- intersect(names(dependency_data[[x]]), rownames(pooled_mut))
       if(length(cls)==0)
         return(NULL)
-      cc = cor(dependency_data[[x]][cls], pooled_mut[cls,], use='complete')
+      cc = cor(dependency_data[[x]][cls], pooled_mut[cls,], use='complete', method=method)
       ii <- c(order(cc, decreasing = T)[1:k], order(cc, decreasing=F)[k:1])
       data.frame(
         genes = colnames(cc)[ii],
@@ -1354,7 +1403,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
       cls <- intersect(names(dependency_data[[x]]), rownames(gene.CN.SNP.priority))
       if(length(cls)==0)
         return(NULL)
-      cc = cor(dependency_data[[x]][cls], gene.CN.SNP.priority[cls,], use='pairwise')
+      cc = cor(dependency_data[[x]][cls], gene.CN.SNP.priority[cls,], use='pairwise', method=method)
       ii <- c(order(cc, decreasing = T)[1:k], order(cc, decreasing=F)[k:1])
       data.frame(
         genes = colnames(cc)[ii],
@@ -1372,7 +1421,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
       cls <- intersect(names(dependency_data[[x]]), rownames(RNAseq))
       if(length(cls)==0)
         return(NULL)
-      cc = cor(dependency_data[[x]][cls], RNAseq[cls,], use='complete')
+      cc = cor(dependency_data[[x]][cls], RNAseq[cls,], use='complete', method=method)
       ii <- c(order(cc, decreasing = T)[1:k], order(cc, decreasing=F)[k:1])
       data.frame(
         genes = colnames(cc)[ii],
@@ -1390,7 +1439,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
       cls <- intersect(names(dependency_data[[x]]), rownames(RBBS))
       if(length(cls)==0)
         return(NULL)
-      cc = cor(dependency_data[[x]][cls], RBBS[cls,], use='pairwise.complete.obs')
+      cc = cor(dependency_data[[x]][cls], RBBS[cls,], use='pairwise.complete.obs', method=method)
       ii <- c(order(cc, decreasing = T)[1:k], order(cc, decreasing=F)[k:1])
       data.frame(
         genes = colnames(cc)[ii],
@@ -1408,7 +1457,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
       cls <- intersect(names(dependency_data[[x]]), rownames(chromatin))
       if(length(cls)==0)
         return(NULL)
-      cc = cor(dependency_data[[x]][cls], chromatin[cls,], use='complete')
+      cc = cor(dependency_data[[x]][cls], chromatin[cls,], use='complete', method=method)
       ii <- c(order(cc, decreasing = T)[1:k], order(cc, decreasing=F)[k:1])
       data.frame(
         genes = colnames(cc)[ii],
@@ -1426,7 +1475,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
       cls <- intersect(names(dependency_data[[x]]), rownames(metabolome))
       if(length(cls)==0)
         return(NULL)
-      cc = cor(dependency_data[[x]][cls], metabolome[cls,], use='complete')
+      cc = cor(dependency_data[[x]][cls], metabolome[cls,], use='complete', method=method)
       ii <- c(order(cc, decreasing = T)[1:k], order(cc, decreasing=F)[k:1])
       data.frame(
         genes = colnames(cc)[ii],
@@ -1444,11 +1493,246 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
       cls <- intersect(names(dependency_data[[x]]), rownames(gsea_hallmarks))
       if(length(cls)==0)
         return(NULL)
-      cc = cor(dependency_data[[x]][cls], gsea_hallmarks[cls,], use='complete')
+      cc = cor(dependency_data[[x]][cls], gsea_hallmarks[cls,], use='complete', method=method)
       ii <- c(order(cc, decreasing = T)[1:k], order(cc, decreasing=F)[k:1])
       data.frame(
         genes = colnames(cc)[ii],
         scores = cc[ii],
+        from = x,
+        to = "GSEA Hallmark"
+      )
+    })
+    return_df <- rbind(return_df, bind_rows(p))
+  }
+  
+  
+  if("bioplex" %in% to){
+    bioplex <- load.from.taiga(data.name='bioplex-ppi-e127', data.version=1)
+    df_1 <- bioplex[bioplex$SymbolA==gene,]
+    df_2 <- bioplex[bioplex$SymbolB==gene,]
+    
+    p <- data.frame(
+      genes = c(df_1$SymbolB, df_2$SymbolA),
+      scores = c(df_1$`p(Interaction)`, df_2$`p(Interaction)`),
+      from = "BioPlex",
+      to = "BioPlex"
+    )
+    
+    return_df <- rbind(return_df, p)
+  }
+  ### Additional filtering and annotation
+  # Filter by correlation coefficient
+  return_df <- return_df[abs(return_df$scores)>r_cutoff,]
+  
+  # Duplicate correlations are marked TRUE
+  ii = which(return_df$genes %in% return_df$genes[duplicated(return_df$genes)])
+  return_df$starred <- FALSE
+  return_df$starred[ii] <- TRUE
+  
+  # CGCs are marked as TRUE
+  cgc <- as.character(read.csv('~/Data/cancer_gene_census_v2.csv')$Gene.Symbol)
+  return_df$isCGC <- ifelse(return_df$genes %in% cgc, TRUE, FALSE)
+  
+  # Propellers are marked TRUE
+  propeller_list <- readRDS('~/Data/propeller_list.RDS')
+  return_df$isPropeller <- ifelse(return_df$genes %in% propeller_list, TRUE, FALSE)
+  
+  # Additional Annotation
+  return_df$annot <- annotate_genelist(return_df$genes, type = 'position')
+  
+  return(return_df)
+}
+
+find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "Achilles", "CRISPR", "Combined"), to=c("mutation", "copy number", "expression", 'dependency', 'methylation', 'chromatin', 'metabolome', 'gsea_hallmarks'), annotate=T){
+  return_df <- data.frame()
+  dependency_data <- sapply(from, loadData, gene=gene)
+  library("taigr")
+  library('dplyr')
+  
+  if('dependency' %in% to){
+    dependency_else <- sapply(from, loadData)
+    p <- lapply(names(dependency_data), function(x){
+      cls <- intersect(names(dependency_data[[x]]), rownames(dependency_else[[x]]))
+      if(length(cls)==0)
+        return(NULL)
+      lm_df = run_lm_stats_limma(vec=dependency_data[[x]][cls], mat=dependency_else[[x]][cls,])
+      ii <- order(lm_df$log_odds, decreasing = T)[1:k]
+      data.frame(
+        genes = lm_df$Gene[ii],
+        scores = lm_df$EffectSize[ii],
+        p.value = lm_df$p.value[ii],
+        from = x,
+        to = x
+      )
+    })
+    return_df <- rbind(return_df, bind_rows(p))
+  }
+  
+  if('Achilles' %in% to){
+    Achilles <- loadData(type='Achilles')
+    p <- lapply(names(dependency_data), function(x){
+      cls <- intersect(names(dependency_data[[x]]), rownames(Achilles))
+      if(length(cls)==0)
+        return(NULL)
+      lm_df = run_lm_stats_limma(vec=dependency_data[[x]][cls], mat=Achilles[cls,])
+      ii <- order(lm_df$log_odds, decreasing = T)[1:k]
+      data.frame(
+        genes = colnames(cc)[ii],
+        scores = cc[ii],
+        p.value = lm_df$p.value[ii],
+        from = x,
+        to = "Achilles"
+      )
+    })
+    return_df <- rbind(return_df, bind_rows(p))
+  }
+  
+  if('CRISPR' %in% to){
+    CRISPR <- loadData(type='CRISPR')
+    p <- lapply(names(dependency_data), function(x){
+      cls <- intersect(names(dependency_data[[x]]), rownames(CRISPR))
+      if(length(cls)==0)
+        return(NULL)
+      cc = run_lm_stats_limma(vec=dependency_data[[x]][cls], mat=CRISPR[cls,])
+      ii <- c(order(cc, decreasing = T)[1:k], order(cc, decreasing=F)[k:1])
+      data.frame(
+        genes = colnames(cc)[ii],
+        scores = cc[ii],
+        p.value = lm_df$p.value[ii],
+        from = x,
+        to = "CRISPR"
+      )
+    })
+    return_df <- rbind(return_df, bind_rows(p))
+  }
+  
+  if('mutation' %in% to){
+    pooled_mut <- load.from.taiga(data.name='pooled-mutation-6481', data.version=1)
+    colnames(pooled_mut) <- sapply(colnames(pooled_mut), strsplit2, split=" ", n=1)
+    p <- lapply(names(dependency_data), function(x){
+      cls <- intersect(names(dependency_data[[x]]), rownames(pooled_mut))
+      if(length(cls)==0)
+        return(NULL)
+      lm_df = run_lm_stats_limma(vec=dependency_data[[x]][cls], mat=pooled_mut[cls,])
+      ii <- order(lm_df$log_odds, decreasing = T)[1:k]
+      data.frame(
+        genes = lm_df$Gene[ii],
+        scores = lm_df$EffectSize[ii],
+        p.value = lm_df$p.value[ii],
+        from = x,
+        to = "Mutation"
+      )
+    })
+    return_df <- rbind(return_df, bind_rows(p))
+  }
+  
+  if('copy number' %in% to){
+    gene.CN.SNP.priority <- loadData(type="cn")
+    p <- lapply(names(dependency_data), function(x){
+      cls <- intersect(names(dependency_data[[x]]), rownames(gene.CN.SNP.priority))
+      if(length(cls)==0)
+        return(NULL)
+      lm_df = run_lm_stats_limma(vec=dependency_data[[x]][cls], mat=gene.CN.SNP.priority[cls,])
+      ii <- order(lm_df$log_odds, decreasing = T)[1:k]
+      data.frame(
+        genes = lm_df$Gene[ii],
+        scores = lm_df$EffectSize[ii],
+        p.value = lm_df$p.value[ii],
+        from = x,
+        to = "Copy Number"
+      )
+    })
+    return_df <- rbind(return_df, bind_rows(p))
+  }
+  
+  if('expression' %in% to){
+    RNAseq <- loadData(type='RNAseq')
+    p <- lapply(names(dependency_data), function(x){
+      cls <- intersect(names(dependency_data[[x]]), rownames(RNAseq))
+      if(length(cls)==0)
+        return(NULL)
+      lm_df = run_lm_stats_limma(vec=dependency_data[[x]][cls], mat=RNAseq[cls,])
+      ii <- order(lm_df$log_odds, decreasing = T)[1:k]
+      data.frame(
+        genes = lm_df$Gene[ii],
+        scores = lm_df$EffectSize[ii],
+        p.value = lm_df$p.value[ii],
+        from = x,
+        to = "Expression"
+      )
+    })
+    return_df <- rbind(return_df, bind_rows(p))
+  }
+  
+  if('methylation' %in% to){
+    RRBS <- loadData(type='methylation')
+    p <- lapply(names(dependency_data), function(x){
+      cls <- intersect(names(dependency_data[[x]]), rownames(RRBS))
+      if(length(cls)==0)
+        return(NULL)
+      lm_df = run_lm_stats_limma(vec=dependency_data[[x]][cls], mat=RRBS[cls,])
+      ii <- order(lm_df$log_odds, decreasing = T)[1:k]
+      data.frame(
+        genes = lm_df$Gene[ii],
+        scores = lm_df$EffectSize[ii],
+        p.value = lm_df$p.value[ii],
+        from = x,
+        to = "Methylation"
+      )
+    })
+    return_df <- rbind(return_df, bind_rows(p))
+  }
+  
+  if('chromatin' %in% to){
+    chromatin <- loadData("chromatin")
+    p <- lapply(names(dependency_data), function(x){
+      cls <- intersect(names(dependency_data[[x]]), rownames(chromatin))
+      if(length(cls)==0)
+        return(NULL)
+      lm_df = run_lm_stats_limma(vec=dependency_data[[x]][cls], mat=chromatin[cls,])
+      ii <- order(lm_df$log_odds, decreasing = T)[1:k]
+      data.frame(
+        genes = lm_df$Gene[ii],
+        scores = lm_df$EffectSize[ii],
+        p.value = lm_df$p.value[ii],
+        from = x,
+        to = "Chromatin"
+      )
+    })
+    return_df <- rbind(return_df, bind_rows(p))
+  }
+  
+  if('metabolome' %in% to){
+    metabolome <- loadData("metabolome")
+    p <- lapply(names(dependency_data), function(x){
+      cls <- intersect(names(dependency_data[[x]]), rownames(metabolome))
+      if(length(cls)==0)
+        return(NULL)
+      lm_df = run_lm_stats_limma(vec=dependency_data[[x]][cls], mat=metabolome[cls,])
+      ii <- order(lm_df$log_odds, decreasing = T)[1:k]
+      data.frame(
+        genes = lm_df$Gene[ii],
+        scores = lm_df$EffectSize[ii],
+        p.value = lm_df$p.value[ii],
+        from = x,
+        to = "Metabolome"
+      )
+    })
+    return_df <- rbind(return_df, bind_rows(p))
+  }
+  
+  if('gsea_hallmarks' %in% to){
+    gsea_hallmarks <- t(load.from.taiga(data.name='ssgsea-enrichment-scores-for-msigdb-h-using-ccle-rnaseq-expression', data.version=1))
+    p <- lapply(names(dependency_data), function(x){
+      cls <- intersect(names(dependency_data[[x]]), rownames(gsea_hallmarks))
+      if(length(cls)==0)
+        return(NULL)
+      lm_df = run_lm_stats_limma(vec=dependency_data[[x]][cls], mat=gsea_hallmarks[cls,])
+      ii <- order(lm_df$log_odds, decreasing = T)[1:k]
+      data.frame(
+        genes = lm_df$Gene[ii],
+        scores = lm_df$EffectSize[ii],
+        p.value = lm_df$p.value[ii],
         from = x,
         to = "GSEA Hallmark"
       )
@@ -1475,213 +1759,6 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   
   # Additional Annotation
   return_df$annot <- annotate_genelist(return_df$genes, type = 'position')
-  
-  return(return_df)
-}
-
-find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "Achilles", "CRISPR", "Combined"), to=c("mutation", "copy number", "expression", 'dependency', 'methylation', 'chromatin', 'metabolome', 'gsea_hallmarks')){
-  return_df <- data.frame()
-  dependency_data <- sapply(from, loadData, gene=gene)
-  library("taigr")
-  library('dplyr')
-  
-  if('dependency' %in% to){
-    dependency_else <- sapply(from, loadData)
-    p <- lapply(names(dependency_data), function(x){
-      cls <- intersect(names(dependency_data[[x]]), rownames(dependency_else[[x]]))
-      if(length(cls)==0)
-        return(NULL)
-      lm_df = run_lm_stats_limma(vec=dependency_data[[x]][cls], mat=dependency_else[[x]][cls,])
-      ii <- order(lm_df$log_odds, decreasing = T)[1:k]
-      data.frame(
-        genes = lm_df$Gene[ii],
-        scores = lm_df$EffectSize[ii],
-        from = x,
-        to = x
-      )
-    })
-    return_df <- rbind(return_df, bind_rows(p))
-  }
-  
-  if('Achilles' %in% to){
-    Achilles <- loadData(type='Achilles')
-    p <- lapply(names(dependency_data), function(x){
-      cls <- intersect(names(dependency_data[[x]]), rownames(Achilles))
-      if(length(cls)==0)
-        return(NULL)
-      lm_df = run_lm_stats_limma(vec=dependency_data[[x]][cls], mat=Achilles[cls,])
-      ii <- order(lm_df$log_odds, decreasing = T)[1:k]
-      data.frame(
-        genes = colnames(cc)[ii],
-        scores = cc[ii],
-        from = x,
-        to = "Achilles"
-      )
-    })
-    return_df <- rbind(return_df, bind_rows(p))
-  }
-  
-  if('CRISPR' %in% to){
-    CRISPR <- loadData(type='CRISPR')
-    p <- lapply(names(dependency_data), function(x){
-      cls <- intersect(names(dependency_data[[x]]), rownames(CRISPR))
-      if(length(cls)==0)
-        return(NULL)
-      cc = run_lm_stats_limma(vec=dependency_data[[x]][cls], mat=CRISPR[cls,])
-      ii <- c(order(cc, decreasing = T)[1:k], order(cc, decreasing=F)[k:1])
-      data.frame(
-        genes = colnames(cc)[ii],
-        scores = cc[ii],
-        from = x,
-        to = "CRISPR"
-      )
-    })
-    return_df <- rbind(return_df, bind_rows(p))
-  }
-  
-  if('mutation' %in% to){
-    pooled_mut <- load.from.taiga(data.name='pooled-mutation-6481', data.version=1)
-    colnames(pooled_mut) <- sapply(colnames(pooled_mut), strsplit2, split=" ", n=1)
-    p <- lapply(names(dependency_data), function(x){
-      cls <- intersect(names(dependency_data[[x]]), rownames(pooled_mut))
-      if(length(cls)==0)
-        return(NULL)
-      lm_df = run_lm_stats_limma(vec=dependency_data[[x]][cls], mat=pooled_mut[cls,])
-      ii <- order(lm_df$log_odds, decreasing = T)[1:k]
-      data.frame(
-        genes = lm_df$Gene[ii],
-        scores = lm_df$EffectSize[ii],
-        from = x,
-        to = "Mutation"
-      )
-    })
-    return_df <- rbind(return_df, bind_rows(p))
-  }
-  
-  if('copy number' %in% to){
-    gene.CN.SNP.priority <- loadData(type="cn")
-    p <- lapply(names(dependency_data), function(x){
-      cls <- intersect(names(dependency_data[[x]]), rownames(gene.CN.SNP.priority))
-      if(length(cls)==0)
-        return(NULL)
-      lm_df = run_lm_stats_limma(vec=dependency_data[[x]][cls], mat=gene.CN.SNP.priority[cls,])
-      ii <- order(lm_df$log_odds, decreasing = T)[1:k]
-      data.frame(
-        genes = lm_df$Gene[ii],
-        scores = lm_df$EffectSize[ii],
-        from = x,
-        to = "Copy Number"
-      )
-    })
-    return_df <- rbind(return_df, bind_rows(p))
-  }
-  
-  if('expression' %in% to){
-    RNAseq <- loadData(type='RNAseq')
-    p <- lapply(names(dependency_data), function(x){
-      cls <- intersect(names(dependency_data[[x]]), rownames(RNAseq))
-      if(length(cls)==0)
-        return(NULL)
-      lm_df = run_lm_stats_limma(vec=dependency_data[[x]][cls], mat=RNAseq[cls,])
-      ii <- order(lm_df$log_odds, decreasing = T)[1:k]
-      data.frame(
-        genes = lm_df$Gene[ii],
-        scores = lm_df$EffectSize[ii],
-        from = x,
-        to = "Expression"
-      )
-    })
-    return_df <- rbind(return_df, bind_rows(p))
-  }
-  
-  if('methylation' %in% to){
-    RRBS <- loadData(type='methylation')
-    p <- lapply(names(dependency_data), function(x){
-      cls <- intersect(names(dependency_data[[x]]), rownames(RRBS))
-      if(length(cls)==0)
-        return(NULL)
-      lm_df = run_lm_stats_limma(vec=dependency_data[[x]][cls], mat=RRBS[cls,])
-      ii <- order(lm_df$log_odds, decreasing = T)[1:k]
-      data.frame(
-        genes = lm_df$Gene[ii],
-        scores = lm_df$EffectSize[ii],
-        from = x,
-        to = "Methylation"
-      )
-    })
-    return_df <- rbind(return_df, bind_rows(p))
-  }
-  
-  if('chromatin' %in% to){
-    chromatin <- loadData("chromatin")
-    p <- lapply(names(dependency_data), function(x){
-      cls <- intersect(names(dependency_data[[x]]), rownames(chromatin))
-      if(length(cls)==0)
-        return(NULL)
-      lm_df = run_lm_stats_limma(vec=dependency_data[[x]][cls], mat=chromatin[cls,])
-      ii <- order(lm_df$log_odds, decreasing = T)[1:k]
-      data.frame(
-        genes = lm_df$Gene[ii],
-        scores = lm_df$EffectSize[ii],
-        from = x,
-        to = "Chromatin"
-      )
-    })
-    return_df <- rbind(return_df, bind_rows(p))
-  }
-  
-  if('metabolome' %in% to){
-    metabolome <- loadData("metabolome")
-    p <- lapply(names(dependency_data), function(x){
-      cls <- intersect(names(dependency_data[[x]]), rownames(metabolome))
-      if(length(cls)==0)
-        return(NULL)
-      lm_df = run_lm_stats_limma(vec=dependency_data[[x]][cls], mat=metabolome[cls,])
-      ii <- order(lm_df$log_odds, decreasing = T)[1:k]
-      data.frame(
-        genes = lm_df$Gene[ii],
-        scores = lm_df$EffectSize[ii],
-        from = x,
-        to = "Metabolome"
-      )
-    })
-    return_df <- rbind(return_df, bind_rows(p))
-  }
-  
-  if('gsea_hallmarks' %in% to){
-    gsea_hallmarks <- t(load.from.taiga(data.name='ssgsea-enrichment-scores-for-msigdb-h-using-ccle-rnaseq-expression', data.version=1))
-    p <- lapply(names(dependency_data), function(x){
-      cls <- intersect(names(dependency_data[[x]]), rownames(gsea_hallmarks))
-      if(length(cls)==0)
-        return(NULL)
-      lm_df = run_lm_stats_limma(vec=dependency_data[[x]][cls], mat=gsea_hallmarks[cls,])
-      ii <- order(lm_df$log_odds, decreasing = T)[1:k]
-      data.frame(
-        genes = lm_df$Gene[ii],
-        scores = lm_df$EffectSize[ii],
-        from = x,
-        to = "GSEA Hallmark"
-      )
-    })
-    return_df <- rbind(return_df, bind_rows(p))
-  }
-  
-  ### Additional filtering and annotation
-  # Filter by correlation coefficient
-  return_df <- return_df[abs(return_df$scores)>r_cutoff,]
-  
-  # Duplicate correlations are marked TRUE
-  ii = which(return_df$genes %in% return_df$genes[duplicated(return_df$genes)])
-  return_df$starred <- FALSE
-  return_df$starred[ii] <- TRUE
-  
-  # CGCs are marked as TRUE
-  cgc <- as.character(read.csv('~/Desktop/cancer_gene_census_v2.csv')$Gene.Symbol)
-  return_df$isCGC <- ifelse(return_df$genes %in% cgc, TRUE, FALSE)
-  
-  # Propellers are marked TRUE
-  propeller_list <- readxl::read_xlsx("~/Downloads/SO-2639138G_Customer_File.xlsx")$GeneSymbol
-  return_df$isPropeller <- ifelse(return_df$genes %in% propeller_list, TRUE, FALSE)
   
   return(return_df)
 }
