@@ -1309,7 +1309,7 @@ run_lm_stats_limma <- function(mat, vec, covars = NULL, weights = NULL, target_t
   return(results)
 }
 
-find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, from=c("DRIVE", "Achilles", "CRISPR", "Combined"), to=c("mutation", "copy number", "expression", 'dependency', 'methylation', 'chromatin', 'metabolome', 'gsea_hallmarks', 'bioplex'), annotate=T, manual_dependency=NULL, method='spearman'){
+find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, from=c("DRIVE", "Achilles", "CRISPR", "Combined"), to=c("mutation", "copy number", "expression", 'dependency', 'methylation', 'chromatin', 'metabolome', 'gsea_hallmarks', 'bioplex'), annotate=T, manual_dependency=NULL, method='spearman', updateProgress=NULL){
   return_df <- data.frame()
   dependency_data <- NULL
   if(!is.null(manual_dependency))
@@ -1321,13 +1321,22 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   library("taigr")
   library('dplyr')
   
+  progress <- function(updateProgress, status, value){
+    if(!is.function(updateProgress)){
+      return()
+    }else{
+      updateProgress(detail = paste0("Completing ", status), value=value)
+    }
+  }
+  
   if('dependency' %in% to){
+    progress(updateProgress, status="dependency calculations", value=1/8)
     dependency_else <- sapply(from, loadData)
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(names(dependency_data[[x]]), rownames(dependency_else[[x]]))
       if(length(cls)==0)
         return(NULL)
-      cc = cor(dependency_data[[x]][cls], dependency_else[[x]][cls,], use='pairwise.complete.obs', method='spearman')
+      cc = cor(dependency_data[[x]][cls], dependency_else[[x]][cls,], use='pairwise.complete.obs', method=method)
       ii <- c(order(cc, decreasing = T)[1:k], order(cc, decreasing=F)[k:1])
       data.frame(
         genes = colnames(cc)[ii],
@@ -1339,43 +1348,9 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
     return_df <- rbind(return_df, bind_rows(p))
   }
   
-  if('Achilles' %in% to){
-    Achilles <- loadData(type='Achilles')
-    p <- lapply(names(dependency_data), function(x){
-      cls <- intersect(names(dependency_data[[x]]), rownames(Achilles))
-      if(length(cls)==0)
-        return(NULL)
-      cc = cor(dependency_data[[x]][cls], Achilles[cls,], use='complete', method=method)
-      ii <- c(order(cc, decreasing = T)[1:k], order(cc, decreasing=F)[k:1])
-      data.frame(
-        genes = colnames(cc)[ii],
-        scores = cc[ii],
-        from = x,
-        to = "Achilles"
-      )
-    })
-    return_df <- rbind(return_df, bind_rows(p))
-  }
-  
-  if('CRISPR' %in% to){
-    CRISPR <- loadData(type='CRISPR')
-    p <- lapply(names(dependency_data), function(x){
-      cls <- intersect(names(dependency_data[[x]]), rownames(CRISPR))
-      if(length(cls)==0)
-        return(NULL)
-      cc = cor(dependency_data[[x]][cls], CRISPR[cls,], use='complete', method=method)
-      ii <- c(order(cc, decreasing = T)[1:k], order(cc, decreasing=F)[k:1])
-      data.frame(
-        genes = colnames(cc)[ii],
-        scores = cc[ii],
-        from = x,
-        to = "CRISPR"
-      )
-    })
-    return_df <- rbind(return_df, bind_rows(p))
-  }
-  
   if('mutation' %in% to){
+    progress(updateProgress, status="mutation calculations", value=2/8)
+    
     pooled_mut <- load.from.taiga(data.name='pooled-mutation-6481', data.version=1)
     colnames(pooled_mut) <- sapply(colnames(pooled_mut), strsplit2, split=" ", n=1)
     p <- lapply(names(dependency_data), function(x){
@@ -1395,6 +1370,8 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   }
   
   if('copy number' %in% to){
+    progress(updateProgress, status="copynumber calculations", value=3/8)
+    
     gene.CN.SNP.priority <- load.from.taiga(data.name='gene-level-cn-87aa', data.version=3, data.file='gene_CN_SNP_priority')
     rownames(gene.CN.SNP.priority) <- sapply(rownames(gene.CN.SNP.priority), strsplit2, split="snp_", n=2)
     colnames(gene.CN.SNP.priority) <- sapply(colnames(gene.CN.SNP.priority), strsplit2, split=" ", n=1)
@@ -1416,6 +1393,8 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   }
   
   if('expression' %in% to){
+    progress(updateProgress, status="expression calculations", value=4/8)
+    
     RNAseq <- loadData(type='RNAseq')
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(names(dependency_data[[x]]), rownames(RNAseq))
@@ -1434,6 +1413,8 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   }
   
   if('methylation' %in% to){
+    progress(updateProgress, status="methylation calculations", value=5/8)
+    
     RBBS <- loadData(type='methylation')
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(names(dependency_data[[x]]), rownames(RBBS))
@@ -1452,6 +1433,8 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   }
   
   if('chromatin' %in% to){
+    progress(updateProgress, status="chromatin calculations", value=6/8)
+    
     chromatin <- loadData("chromatin")
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(names(dependency_data[[x]]), rownames(chromatin))
@@ -1470,6 +1453,8 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   }
   
   if('metabolome' %in% to){
+    progress(updateProgress, status="metabolomics calculations", value=7/8)
+    
     metabolome <- loadData("metabolome")
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(names(dependency_data[[x]]), rownames(metabolome))
@@ -1488,6 +1473,8 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   }
   
   if('gsea_hallmarks' %in% to){
+    progress(updateProgress, status="dependency calculations", value=8/8)
+    
     gsea_hallmarks <- t(load.from.taiga(data.name='ssgsea-enrichment-scores-for-msigdb-h-using-ccle-rnaseq-expression', data.version=1))
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(names(dependency_data[[x]]), rownames(gsea_hallmarks))
@@ -1507,6 +1494,8 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   
   
   if("bioplex" %in% to){
+    progress(updateProgress, status="Bioplex integrations", value=8/8)
+    
     bioplex <- load.from.taiga(data.name='bioplex-ppi-e127', data.version=1)
     df_1 <- bioplex[bioplex$SymbolA==gene,]
     df_2 <- bioplex[bioplex$SymbolB==gene,]
@@ -1522,6 +1511,8 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   }
   ### Additional filtering and annotation
   # Filter by correlation coefficient
+  progress(updateProgress, status="final annotations", value=8/8)
+  
   return_df <- return_df[abs(return_df$scores)>r_cutoff,]
   
   # Duplicate correlations are marked TRUE
@@ -1543,11 +1534,19 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   return(return_df)
 }
 
-find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "Achilles", "CRISPR", "Combined"), to=c("mutation", "copy number", "expression", 'dependency', 'methylation', 'chromatin', 'metabolome', 'gsea_hallmarks'), annotate=T){
+find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "Achilles", "CRISPR", "Combined"), to=c("mutation", "copy number", "expression", 'dependency', 'methylation', 'chromatin', 'metabolome', 'gsea_hallmarks'), annotate=T, updateProgress=NULL){
   return_df <- data.frame()
   dependency_data <- sapply(from, loadData, gene=gene)
   library("taigr")
   library('dplyr')
+  
+  progress <- function(updateProgress, status, value){
+    if(!is.function(updateProgress)){
+      return()
+    }else{
+      updateProgress(detail = paste0("Completing ", status), value=value)
+    }
+  }
   
   if('dependency' %in% to){
     dependency_else <- sapply(from, loadData)
@@ -1566,6 +1565,7 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
       )
     })
     return_df <- rbind(return_df, bind_rows(p))
+    progress(updateProgress, status="dependency calculations", value=1/8)
   }
   
   if('Achilles' %in% to){
@@ -1604,6 +1604,7 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
       )
     })
     return_df <- rbind(return_df, bind_rows(p))
+    progress(updateProgress, status="dependency calculations", value=2/8)
   }
   
   if('mutation' %in% to){
@@ -1624,6 +1625,7 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
       )
     })
     return_df <- rbind(return_df, bind_rows(p))
+    progress(updateProgress, status="mutation calculations", value=1/8)
   }
   
   if('copy number' %in% to){
@@ -1643,6 +1645,7 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
       )
     })
     return_df <- rbind(return_df, bind_rows(p))
+    progress(updateProgress, status="copynumber calculations", value=3/8)
   }
   
   if('expression' %in% to){
@@ -1662,6 +1665,7 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
       )
     })
     return_df <- rbind(return_df, bind_rows(p))
+    progress(updateProgress, status="expression calculations", value=4/8)
   }
   
   if('methylation' %in% to){
@@ -1681,6 +1685,7 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
       )
     })
     return_df <- rbind(return_df, bind_rows(p))
+    progress(updateProgress, status="methylation calculations", value=4.5/8)
   }
   
   if('chromatin' %in% to){
@@ -1700,6 +1705,7 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
       )
     })
     return_df <- rbind(return_df, bind_rows(p))
+    progress(updateProgress, status="chromatin calculations", value=5/8)
   }
   
   if('metabolome' %in% to){
@@ -1719,6 +1725,7 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
       )
     })
     return_df <- rbind(return_df, bind_rows(p))
+    progress(updateProgress, status="metabolomics calculations", value=6/8)
   }
   
   if('gsea_hallmarks' %in% to){
@@ -1738,6 +1745,7 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
       )
     })
     return_df <- rbind(return_df, bind_rows(p))
+    progress(updateProgress, status="GSEA hallmarks calculations", value=7/8)
   }
   
   ### Additional filtering and annotation
@@ -1758,6 +1766,7 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
   return_df$isPropeller <- ifelse(return_df$genes %in% propeller_list, TRUE, FALSE)
   
   # Additional Annotation
+  progress(updateProgress, status="final calculations", value=8/8)
   return_df$annot <- annotate_genelist(return_df$genes, type = 'position')
   
   return(return_df)
