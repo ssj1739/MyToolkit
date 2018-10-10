@@ -86,7 +86,22 @@ write_gct <- function(X, file){
 }
 
 loadConstants <- function(){
-  load(file = '~/Data/constants.RData', envir = .GlobalEnv)
+  if(!file.exists("~/Data/constants.RData")){
+    #CONSTANTS ---------------------------------------------------------------
+    #Accessible by loadConstants function
+    CRISPR <- load_data("CRISPR")
+    COMBINED <- load_data("Combined")
+    ACHILLES <- load_data("Achilles")
+    DRIVE <- load_data("DRIVE")
+
+    ALLGENES <- union_recursive(list(colnames(CRISPR), colnames(COMBINED), colnames(ACHILLES), colnames(DRIVE)))
+    ALLCELLS <- union_recursive(list(rownames(CRISPR), rownames(COMBINED), rownames(ACHILLES), rownames(DRIVE)))
+    COMMONGENES <- intersect_recursive(list(colnames(CRISPR), colnames(COMBINED), colnames(ACHILLES), colnames(DRIVE)))
+    COMMONCELLS <- intersect_recursive(list(rownames(CRISPR), rownames(COMBINED), rownames(ACHILLES), rownames(DRIVE)))
+
+    save(CRISPR, COMBINED, ACHILLES, DRIVE, ALLGENES, ALLCELLS, COMMONGENES, COMMONCELLS, file = '~/constants.RData')
+  }
+  load(file = '~/constants.RData', envir = .GlobalEnv)
 }
 
 load_data <- function(type, gene=NULL, cell_line=NULL, clean_features=T, clean_celllines=T, convert_id=F, verbose=T, ...){
@@ -442,8 +457,8 @@ dPlot <- function(geneX, geneY, data.set.x="CRISPR", data.set.y="Expression", ge
   library("readr")
   library("ggplot2")
   
-  data.x <- loadData(gene=geneX, type = data.set.x)
-  data.y <- loadData(gene=geneY, type = data.set.y)
+  data.x <- load_data(gene=geneX, type = data.set.x)
+  data.y <- load_data(gene=geneY, type = data.set.y)
   
   cls <- intersect(rownames(data.x), names(data.y))
   tissue <- sapply(cls, get_tissue)
@@ -617,8 +632,8 @@ drive_waterfallplot <- function(gene, cls=NULL, annotate.by='tissue', annotate.g
   library("plotly")
   stopifnot(length(gene)>0)
   
-  gene_effect <- loadData(gene = gene, type="DRIVE")
-  gene_rsa <- loadData(gene = gene, type="DRIVE_RSA")
+  gene_effect <- load_data(gene = gene, type="DRIVE")
+  gene_rsa <- load_data(gene = gene, type="DRIVE_RSA")
   cls = names(gene_effect)
   
   gene_annot.by_tissue=sapply(cls, function(x){ # By default, annotate by tissue/lineage
@@ -667,7 +682,7 @@ drive_waterfallplot <- function(gene, cls=NULL, annotate.by='tissue', annotate.g
     gene_annot <- apply(gene_annot, 2, function(x) any(as.logical(as.numeric(x))))
     
   }else if(annotate.by %in% c("RNAseq", "expr", "expression")){
-    expr <- loadData("RNAseq", gene=annotate.gene)
+    expr <- load_data("RNAseq", gene=annotate.gene)
     gene_annot <- expr[match(cls, names(expr), nomatch=NA)]
     color_by_discrete=F
   }else if(annotate.by %in% c('any', 'all')){
@@ -731,10 +746,10 @@ comparison_waterfallplot <- function(gene, annotate.by="tissue", annotate.gene=N
   library("plotly")
   stopifnot(length(gene)>0)
   
-  gene_effect_avana <- loadData(type = "Avana")
-  gene_effect_achilles <- loadData(type="Achilles")
-  gene_effect_drive <- loadData(type="DRIVE")
-  gene_effect_combined <- loadData(type="Combined")
+  gene_effect_avana <- load_data(type = "Avana")
+  gene_effect_achilles <- load_data(type="Achilles")
+  gene_effect_drive <- load_data(type="DRIVE")
+  gene_effect_combined <- load_data(type="Combined")
   
   which.plots <- c(Avana=gene %in% colnames(gene_effect_avana), Achilles=gene %in% colnames(gene_effect_achilles), DRIVE=gene %in% colnames(gene_effect_drive), Combined=gene %in% colnames(gene_effect_combined))
   
@@ -791,7 +806,7 @@ comparison_waterfallplot <- function(gene, annotate.by="tissue", annotate.gene=N
     gene_annot <- apply(gene_annot, 2, function(x) any(as.logical(as.numeric(x))))
     
   }else if(annotate.by %in% c("RNAseq", "expr", "expression")){
-    expr <- loadData("RNAseq", gene=annotate.gene)
+    expr <- load_data("RNAseq", gene=annotate.gene)
     gene_annot <- expr[match(cls, names(expr), nomatch=NA)]
     color_by_discrete=F
   }else if(annotate.by %in% c('any', 'all')){
@@ -802,7 +817,7 @@ comparison_waterfallplot <- function(gene, annotate.by="tissue", annotate.gene=N
     gene_annot <- ccle_binary[grep(paste0(annotate.gene,"[[:punct:]]"), ccle_binary$Name),match(cls, colnames(ccle_binary), nomatch=1)]
     gene_annot <- apply(gene_annot, 2, function(x) any(as.logical(as.numeric(x))))
   }else if(annotate.by %in% c('DRIVE', 'Achilles', 'CRISPR')){
-    dep = loadData(type=annotate.by, gene=annotate.gene)
+    dep = load_data(type=annotate.by, gene=annotate.gene)
     gene_annot <- dep[match(cls, names(dep), nomatch = NA)]
   }
   
@@ -898,10 +913,10 @@ comparison_dataframe <- function(gene, annotate.by="tissue", annotate.gene=NULL,
   library('readr')
   stopifnot(length(gene)>0)
   
-  gene_effect_avana <- loadData(type = "Avana", gene=gene)
-  gene_effect_achilles <- loadData(type="Achilles", gene=gene)
-  gene_effect_drive <- loadData(type="DRIVE", gene=gene)
-  gene_effect_combined <- loadData(type="Combined", gene=gene)
+  gene_effect_avana <- load_data(type = "Avana", gene=gene)
+  gene_effect_achilles <- load_data(type="Achilles", gene=gene)
+  gene_effect_drive <- load_data(type="DRIVE", gene=gene)
+  gene_effect_combined <- load_data(type="Combined", gene=gene)
   
   cls <- switch(reorder.by,
                 DRIVE=names(gene_effect_drive),
@@ -957,7 +972,7 @@ comparison_dataframe <- function(gene, annotate.by="tissue", annotate.gene=NULL,
     gene_annot <- apply(gene_annot, 2, function(x) any(as.logical(as.numeric(x))))
     
   }else if(annotate.by %in% c("RNAseq", "expr", "expression")){
-    expr <- loadData("RNAseq", gene=annotate.gene)
+    expr <- load_data("RNAseq", gene=annotate.gene)
     gene_annot <- expr[match(cls, names(expr), nomatch=NA)]
     color_by_discrete=F
   }else if(annotate.by %in% c('any', 'all')){
@@ -968,7 +983,7 @@ comparison_dataframe <- function(gene, annotate.by="tissue", annotate.gene=NULL,
     gene_annot <- ccle_binary[grep(paste0(annotate.gene,"[[:punct:]]"), ccle_binary$Name),match(cls, colnames(ccle_binary), nomatch=1)]
     gene_annot <- apply(gene_annot, 2, function(x) any(as.logical(as.numeric(x))))
   }else if(annotate.by %in% c('DRIVE', 'Achilles', 'CRISPR')){
-    dep = loadData(type=annotate.by, gene=annotate.gene)
+    dep = load_data(type=annotate.by, gene=annotate.gene)
     gene_annot <- dep[match(cls, names(dep), nomatch = NA)]
   }
   
@@ -1430,7 +1445,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   if(!is.null(manual_dependency))
     dependency_data <- list("Manual"=manual_dependency)
   if(!is.null(gene))
-    dependency_data <- lapply(from, loadData, gene=gene)
+    dependency_data <- lapply(from, load_data, gene=gene)
     names(dependency_data) <- from
   
   stopifnot(!is.null(dependency_data))
@@ -1447,7 +1462,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   
   if('dependency' %in% to){
     progress(updateProgress, status="dependency calculations", value=1/8)
-    dependency_else <- sapply(from, loadData)
+    dependency_else <- sapply(from, load_data)
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(rownames(dependency_data[[x]]), rownames(dependency_else[[x]]))
       if(length(cls)==0)
@@ -1467,7 +1482,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   if('mutation' %in% to){
     progress(updateProgress, status="mutation calculations", value=2/8)
     
-    pooled_mut <- loadData("mutation")
+    pooled_mut <- load_data("mutation")
     colnames(pooled_mut) <- sapply(colnames(pooled_mut), strsplit2, split=" ", n=1)
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(rownames(dependency_data[[x]]), rownames(pooled_mut))
@@ -1488,7 +1503,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   if('copy number' %in% to){
     progress(updateProgress, status="copynumber calculations", value=3/8)
     
-    gene.CN.SNP.priority <- loadData('copynumber')
+    gene.CN.SNP.priority <- load_data('copynumber')
     
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(rownames(dependency_data[[x]]), rownames(gene.CN.SNP.priority))
@@ -1509,7 +1524,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   if('expression' %in% to){
     progress(updateProgress, status="expression calculations", value=4/8)
     
-    RNAseq <- loadData(type='RNAseq')
+    RNAseq <- load_data(type='RNAseq')
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(rownames(dependency_data[[x]]), rownames(RNAseq))
       if(length(cls)==0)
@@ -1529,7 +1544,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   if('methylation' %in% to){
     progress(updateProgress, status="methylation calculations", value=5/8)
     
-    RBBS <- loadData(type='methylation')
+    RBBS <- load_data(type='methylation')
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(rownames(dependency_data[[x]]), rownames(RBBS))
       if(length(cls)==0)
@@ -1549,7 +1564,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   if('chromatin' %in% to){
     progress(updateProgress, status="chromatin calculations", value=6/8)
     
-    chromatin <- loadData("chromatin")
+    chromatin <- load_data("chromatin")
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(rownames(dependency_data[[x]]), rownames(chromatin))
       if(length(cls)==0)
@@ -1569,7 +1584,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   if('metabolome' %in% to){
     progress(updateProgress, status="metabolomics calculations", value=7/8)
     
-    metabolome <- loadData("metabolome")
+    metabolome <- load_data("metabolome")
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(rownames(dependency_data[[x]]), rownames(metabolome))
       if(length(cls)==0)
@@ -1625,7 +1640,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
     })
     return_df <- rbind(return_df, bind_rows(p))
     
-    # RPPA <- loadData("RPPA")
+    # RPPA <- load_data("RPPA")
     # p <- lapply(names(dependency_data), function(x){
     #   cls <- intersect(rownames(dependency_data[[x]]), rownames(RPPA))
     #   if(length(cls)==0)
@@ -1689,7 +1704,7 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
   require('dplyr')
   
   return_df <- data.frame()
-  dependency_data <- sapply(from, loadData, gene=gene)
+  dependency_data <- sapply(from, load_data, gene=gene)
 
   
   progress <- function(updateProgress, status, value){
@@ -1701,7 +1716,7 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
   }
   
   if('dependency' %in% to){
-    dependency_else <- sapply(from, loadData)
+    dependency_else <- sapply(from, load_data)
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(rownames(dependency_data[[x]]), rownames(dependency_else[[x]]))
       if(length(cls)==0)
@@ -1721,7 +1736,7 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
   }
   
   if('Achilles' %in% to){
-    Achilles <- loadData(type='Achilles')
+    Achilles <- load_data(type='Achilles')
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(rownames(dependency_data[[x]]), rownames(Achilles))
       if(length(cls)==0)
@@ -1740,7 +1755,7 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
   }
   
   if('CRISPR' %in% to){
-    CRISPR <- loadData(type='CRISPR')
+    CRISPR <- load_data(type='CRISPR')
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(rownames(dependency_data[[x]]), rownames(CRISPR))
       if(length(cls)==0)
@@ -1781,7 +1796,7 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
   }
   
   if('copy number' %in% to){
-    gene.CN.SNP.priority <- loadData(type="cn")
+    gene.CN.SNP.priority <- load_data(type="cn")
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(rownames(dependency_data[[x]]), rownames(gene.CN.SNP.priority))
       if(length(cls)==0)
@@ -1801,7 +1816,7 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
   }
   
   if('expression' %in% to){
-    RNAseq <- loadData(type='RNAseq')
+    RNAseq <- load_data(type='RNAseq')
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(rownames(dependency_data[[x]]), rownames(RNAseq))
       if(length(cls)==0)
@@ -1821,7 +1836,7 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
   }
   
   if('methylation' %in% to){
-    RRBS <- loadData(type='methylation')
+    RRBS <- load_data(type='methylation')
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(rownames(dependency_data[[x]]), rownames(RRBS))
       if(length(cls)==0)
@@ -1841,7 +1856,7 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
   }
   
   if('chromatin' %in% to){
-    chromatin <- loadData("chromatin")
+    chromatin <- load_data("chromatin")
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(rownames(dependency_data[[x]]), rownames(chromatin))
       if(length(cls)==0)
@@ -1861,7 +1876,7 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
   }
   
   if('metabolome' %in% to){
-    metabolome <- loadData("metabolome")
+    metabolome <- load_data("metabolome")
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(rownames(dependency_data[[x]]), rownames(metabolome))
       if(length(cls)==0)
@@ -1943,7 +1958,7 @@ annotate_genelist <- function(genes, type="dependency"){
     GenTable(GOdata, classic=resultsFis)
   }
   if(type %in% c("copy number", "position", "chromosome")){
-    Position <- loadData("Position")
+    Position <- load_data("Position")
     ii = match(genes, Position$gene)
     
     bands <- sapply(ii, function(x){
@@ -1962,10 +1977,10 @@ annotate_genelist <- function(genes, type="dependency"){
 
 # CONSTANTS ---------------------------------------------------------------
 # Accessible by loadConstants function
-# CRISPR <- loadData("CRISPR")
-# COMBINED <- loadData("Combined")
-# ACHILLES <- loadData("Achilles")
-# DRIVE <- loadData("DRIVE")
+# CRISPR <- load_data("CRISPR")
+# COMBINED <- load_data("Combined")
+# ACHILLES <- load_data("Achilles")
+# DRIVE <- load_data("DRIVE")
 # 
 # ALLGENES <- union_recursive(list(colnames(CRISPR), colnames(COMBINED), colnames(ACHILLES), colnames(DRIVE)))
 # ALLCELLS <- union_recursive(list(rownames(CRISPR), rownames(COMBINED), rownames(ACHILLES), rownames(DRIVE)))
