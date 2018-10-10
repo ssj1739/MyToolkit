@@ -89,56 +89,78 @@ loadConstants <- function(){
   load(file = '~/Data/constants.RData', envir = .GlobalEnv)
 }
 
-#' Contained within RSellersLab
-loadData <- function(type, gene=NULL, cell_line=NULL, clean_features=T, clean_celllines=T, convert_id=F, verbose=T, ...){
-  require("taigr")
+load_data <- function(type, gene=NULL, cell_line=NULL, clean_features=T, clean_celllines=T, convert_id=F, verbose=T, ...){
+  if(!require("taigr")){
+    options(repos = c(
+      "https://iwww.broadinstitute.org/~datasci/R-packages",
+      "https://cran.cnr.berkeley.edu"))
+    install.packages('taigr')
+  }
   require('stringr')
   require('magrittr')
-  data <- switch(type,
-                 CRISPR = load.from.taiga(data.name='avana-broad-17q4-2d4b', data.file='gene_effect', quiet = T, ...),
-                 Avana = load.from.taiga(data.name='avana-broad-17q4-2d4b', data.file='gene_effect', quiet = T, ...),
-                 Broad_RNAi = load.from.taiga(data.name='achilles-demeter2-f87d', quiet = T, transpose=T, ...),
-                 Achilles = load.from.taiga(data.name='achilles-demeter2-f87d', quiet = T, transpose=T, ...),
-                 DRIVE = load.from.taiga(data.name='drive-ataris-scores-f72c', data.file='expanded_ATARiS_data', quiet = T, transpose=T, ...),
-                 Novartis_RNAi = load.from.taiga(data.name='drive-ataris-scores-f72c', data.file='expanded_ATARiS_data', quiet = T, transpose = T, ...),
-                 expression = load.from.taiga(data.name='ccle-rnaseq-expression-genes', quiet = T, ...),
+  if(!require("celllinemapr")){
+    options(repos = c(
+      "https://iwww.broadinstitute.org/~datasci/R-packages",
+      "https://cran.cnr.berkeley.edu"))
+    install.packages('celllinemapr')
+  }
+  data <- switch(tolower(type),
+                 crispr = load.from.taiga(data.name='avana-internal-18q3-6b2c', data.file='gene_effect', quiet = T, ...),
+                 avana = load.from.taiga(data.name='avana-internal-18q3-6b2c', data.file='gene_effect', quiet = T, ...),
+                 broad_rnai = load.from.taiga(data.name='achilles-demeter2-f87d', quiet = T, transpose=T, ...),
+                 achilles = load.from.taiga(data.name='demeter2-achilles-5386', data.file='gene_means_proc', quiet = T, transpose=T, ...),
+                 drive = load.from.taiga(data.name='demeter2-drive-0591', data.file='gene_means_proc', quiet = T, transpose=T, ...),
+                 novartis_rnai = load.from.taiga(data.name='demeter2-drive-0591', data.file='gene_means_proc', quiet = T, transpose=T, ...),
+                 expression = load.from.taiga(data.name='depmap-rnaseq-expression-data-363a', data.file='CCLE_depMap_18Q3_RNAseq_RPKM', quiet = T, ...),
                  mutation = load.from.taiga(data.name='pooled-mutation-6481', quiet = T, ...),
                  mut = load.from.taiga(data.name='pooled-mutation-6481', quiet = T, ...),
-                 mut_damaging = load.from.taiga(data.name='damaging-729f', quiet = T, ...),
-                 cn = load.from.taiga(data.name='gene-level-cn-87aa', data.file='gene_CN_SNP_priority', quiet = T, ...),
-                 copynumber = load.from.taiga(data.name='gene-level-cn-87aa', data.file='gene_CN_SNP_priority', quiet = T, ...),
-                 RNAseq = load.from.taiga(data.name='ccle-rnaseq-expression-genes', quiet = T, ...),
-                 DRIVE_RSA = load.from.taiga(data.name='drive-rsa-scores-5668', quiet = T, transpose = T, ...),
+                 mut_damaging = load.from.taiga(data.name='depmap-mutation-calls-9be3', data.file='damaging_mutation', quiet = T, ...),
+                 mut_hotspot = load.from.taiga(data.name='depmap-mutation-calls-9be3', data.file='hotspot_mutation', quiet = T, ...),
+                 cn = load.from.taiga(data.name='depmap-wes-cn-data-81a7', quiet = T, ...),
+                 copynumber = load.from.taiga(data.name='depmap-wes-cn-data-81a7', quiet = T, ...),
+                 rnaseq = load.from.taiga(data.name='depmap-rnaseq-expression-data-363a', data.file='CCLE_depMap_18Q3_RNAseq_RPKM', quiet = T, ...),
                  drive_rsa = load.from.taiga(data.name='drive-rsa-scores-5668', quiet = T, transpose = T, ...),
-                 DRIVE_rsa = load.from.taiga(data.name='drive-rsa-scores-5668', quiet = T, transpose = T, ...),
                  chromatin = load.from.taiga(data.name='ccle-global-chromatin-prof-f49b', quiet = T, ...),
-                 emt = load.from.taiga(data.name='ccle-emt-score-b0da', quiet = T, ...),
-                 EMT = load.from.taiga(data.name='ccle-emt-score-b0da', quiet = T, ...),
-                 GSEA = load.from.taiga(data.name='ssgsea-enrichment-scores-for-msigdb-h-using-ccle-rnaseq-expression', quiet = T, transpose=T, ...),
+                 emt_signature = load.from.taiga(data.name='ccle-emt-score-b0da', quiet = T, ...),
+                 gsea = load.from.taiga(data.name='ssgsea-enrichment-scores-for-msigdb-h-using-ccle-rnaseq-expression', quiet = T, transpose=T, ...),
                  gsea_hallmarks = load.from.taiga(data.name='ssgsea-enrichment-scores-for-msigdb-h-using-ccle-rnaseq-expression', quiet = T, transpose = T, ...),
                  methylation = load.from.taiga(data.name='rrbs-4b29', quiet = T, ...),
                  rrbs = load.from.taiga(data.name='rrbs-4b29', quiet = T, ...),
                  metabolomics = load.from.taiga(data.name='metabolomics-cd0c', quiet = T, ...),
                  metabolome = load.from.taiga(data.name='metabolomics-cd0c', quiet = T, ...),
                  demeter2 = load.from.taiga(data.name='demeter2-combined-dc9c', data.file='gene_means_proc', quiet = T, transpose=T, ...),
-                 Combined_DEMETER2 = load.from.taiga(data.name='demeter2-combined-dc9c', data.file='gene_means_proc', quiet = T, transpose=T, ...),
-                 Combined = load.from.taiga(data.name='demeter2-combined-dc9c', data.file='gene_means_proc', quiet = T, transpose = T, ...),
-                 Combined_RNAi = load.from.taiga(data.name='demeter2-combined-dc9c', data.file='gene_means_proc', quiet = T, transpose = T, ...),
+                 combined_demeter2 = load.from.taiga(data.name='demeter2-combined-dc9c', data.file='gene_means_proc', quiet = T, transpose=T, ...),
+                 combined = load.from.taiga(data.name='demeter2-combined-dc9c', data.file='gene_means_proc', quiet = T, transpose = T, ...),
+                 combined_rnai = load.from.taiga(data.name='demeter2-combined-dc9c', data.file='gene_means_proc', quiet = T, transpose = T, ...),
                  demeter2_combined =  load.from.taiga(data.name='demeter2-combined-dc9c', data.file='gene_means_proc', quiet = T, transpose=T, ...),
-                 Achilles_DEMETER2 = load.from.taiga(data.name='demeter2-achilles-5386', data.file='gene_means_proc', quiet = T, transpose = T),
-                 DRIVE_DEMETER2 = load.from.taiga(data.name='demeter2-drive-0591', data.file='gene_means_proc', transpose=T, quiet = T, ...),
-                 Position = load.from.taiga(data.name='gene-cytogenic-position-2b92', quiet=T, ...),
-                 GDSC = load.from.taiga(data.name='gdsc-ic50-ccle-aligned', data.file='data', quiet=T, ...),
-                 IC50 = load.from.taiga(data.name='gdsc-ic50-ccle-aligned', data.file='data', quiet=T, ...),
-                 miRNA = load.from.taiga(data.name='mirna-expression-2c5f', quiet=T, ...),
+                 achilles_demeter2 = load.from.taiga(data.name='demeter2-achilles-5386', data.file='gene_means_proc', quiet = T, transpose = T),
+                 drive_demeter2 = load.from.taiga(data.name='demeter2-drive-0591', data.file='gene_means_proc', transpose=T, quiet = T, ...),
+                 cytobandposition = load.from.taiga(data.name='gene-cytogenic-position-2b92', quiet=T, ...),
+                 gdsc = load.from.taiga(data.name='gdsc-ic50-ccle-aligned', data.file='data', quiet=T, ...),
+                 ic50 = load.from.taiga(data.name='gdsc-ic50-ccle-aligned', data.file='data', quiet=T, ...),
+                 sanger = load.from.taiga(data.name='sanger-auc-cl-x-drug-matrix-bbb8', quiet = T, ...),
+                 ctd2 = load.from.taiga(data.name='ctrp-v2-auc-named-compounds-with-ids', quiet = T, transpose = T, ...),
+                 mirna = load.from.taiga(data.name='mirna-expression-2c5f', quiet=T, ...),
                  ms = load.from.taiga(data.name='ms-protein-a729', quiet=T, ...),
-                 protein = load.from.taiga(data.name='ms-protein-a729', quiet=T, ...),
-                 RPPA = load.from.taiga(data.name='rppa-8851', quiet=T, ...),
+                 rppa = load.from.taiga(data.name='rppa-8851', quiet=T, ...),
+                 cell_line_annotation = load.from.taiga(data.name='ccle-sample-info', ...),
+                 ccle_annot = load.from.taiga(data.name='ccle-sample-info', ...),
+                 bioplex = load.from.taiga(data.name='bioplex-ppi-e127', ...),
                  other = NULL
   )
+  if(is.null(data)){
+    cat(crayon::bgRed("Please select one of the following datasets:"),
+        crayon::bold("DEPENDENCY:"),"CRISPR","Achilles","DRIVE","Combined","",
+        crayon::bold("DRUG SENSITIVITY:"), "GDSC", "Sanger","",
+        crayon::bold("OMICS:"), "RNAseq", "CopyNumber", "Metabolomics", "BioPlex",
+        "Methylation", "Chromatin", "RPPA", "MS", "Mutation", "miRNA", "",
+        crayon::bold("ANNOTATION:"), "CytobandPosition", "GSEA_hallmarks", "EMT_signature", "CCLE_annot", sep="\n")
+    return()
+  }
   
   # Ensure data is correct format
   force(data)
+  
   if(convert_id || length(grep("DEMETER2", ignore.case = T, type))==1 || length(grep("combined", ignore.case = T, type))==1 ){
     colnames(data) <- as.character(sapply(colnames(data), strsplit2, n=1, split="[&, ]"))
   }
@@ -146,6 +168,9 @@ loadData <- function(type, gene=NULL, cell_line=NULL, clean_features=T, clean_ce
     colnames(data) <- sapply(colnames(data), strsplit2, split=" ", n=1)
   }
   if(clean_celllines){
+    if(any(!is.na(celllinemapr::arxspan.to.ccle(rownames(data), ignore.problems = T)))){
+      rownames(data) <- arxspan.to.ccle(rownames(data), ignore.problems = T, check.unique.mapping = F)
+    }
     rownames(data) <- sapply(rownames(data), str_to_upper)
   }
   
@@ -183,20 +208,7 @@ loadData <- function(type, gene=NULL, cell_line=NULL, clean_features=T, clean_ce
       return(NULL)
     }
   }
-  
-  return(data)
-}
-
-cell_line_status <- function(cell_line, type="RNAseq", gene=NULL){
-  data=loadData(type = type)
-  ii = grepl(pattern = cell_line, rownames(data), ignore.case = T)
-  if(sum(ii)==0){
-    stop("Cell line not found!")
-  }
-  if(!gene %in% colnames(data)){
-    stop("Invalid gene!")
-  }
-  return(data[ii, gene])
+  return(as.data.frame(data))
 }
 
 #' Included in RSellersLab
@@ -319,7 +331,9 @@ reorder2 <- function(X, x.1=NULL, by){
 
 strsplit2 <- function(x, n, ...){
   # cleans name and returns nth argument, quick and easy for gene or cell line names
-  strsplit(x, ...)[[1]][n]
+  sapply(x, function(x)
+    strsplit(x, ...)[[1]][n]
+  )
 }
 
 clean_name <- function(x, ...){
@@ -407,6 +421,16 @@ extract_info_tcga_sample_ids <- function(ids){
 
 `%,%` <- function(a, b){
   paste0(a, b)
+}
+
+get_entrez <- function(gene, return.df = F){
+  library(mygene)
+  df <- queryMany(qterms = gene, field = "entrez", scope = "symbol", species = "human")
+  if (return.df)
+    return(df)
+  
+  entrez <- df$`_id`
+  return(entrez)
 }
 
 # PLOTTING FUNCTIONS ------------------------------------------------------
@@ -513,8 +537,8 @@ waterfallplot <- function(gene, cls=NULL, data.set="CRISPR", annotate.by="tissue
   library("plotly")
   stopifnot(length(gene)>0)
   
-  gene_effect <- loadData(gene = gene, type=data.set)
-  cls = names(gene_effect)
+  gene_effect <- load_data(gene = gene, type=data.set)
+  cls = rownames(gene_effect)
   tissues <- sapply(cls, function(x){ 
     s=strsplit(x, split = "_")[[1]][-1]
     return(paste(s, collapse=" "))
@@ -1237,10 +1261,76 @@ volcano_plot <- function(lm_df, static=F, label=NULL){
 
 # ANALYSIS FUNCTIONS ------------------------------------------------------
 
-
+#' Estimate linear-model stats for a matrix of data using limma with empirical Bayes moderated t-stats for p-values
+#' Adapted from CDS team's cdsr package.
+#'
+#' @param mat: Nxp data matrix with N cell lines and p genes
+#' @param vec: N vector of independent variables. Can be two-group labels as factors, bools, or can be numeric
+#' @param covars: Optional Nxk matrix of covariates
+#' @param weights: Optional N vector of precision weights for each data point
+#' @param target_type: Name of the column variable in the data (default 'Gene')
+#'
+#' @return: data frame of stats
+#' @export
+#'
+#' @examples
+#' CRISPR = load.from.taiga(data.name='avana-2-0-1-d98f', 
+#' data.version=1, 
+#' data.file='ceres_gene_effects',
+#' transpose = T)
+#' is_panc <- load.from.taiga(data.name = 'ccle-lines-lineages') %>% .[, 'pancreas']
+#' ulines <- intersect(rownames(CRISPR), names(is_panc))
+#' lim_res <- run_lm_stats_limma(CRISPR[ulines,], is_panc[ulines])
+#' @export run_lm_limma
+run_lm_limma <- function(mat, vec, covars = NULL, weights = NULL){
+  require(limma)
+  require(magrittr)
+  require(tibble)
+  require(plyr)
+  require(dplyr)
+  
+  udata <- which(!is.na(vec))
+  if (!is.numeric(vec)) {
+    pred <- factor(vec[udata])
+    stopifnot(length(levels(pred)) == 2) #only two group comparisons implemented so far
+    n_out <- colSums(!is.na(mat[udata[pred == levels(pred)[1]],,drop=F]))
+    n_in <- colSums(!is.na(mat[udata[pred == levels(pred)[2]],,drop=F]))
+    min_samples <- pmin(n_out, n_in) %>% set_names(colnames(mat))
+  } else {
+    pred <- vec[udata]
+    min_samples <- colSums(!is.na(mat[udata,]))
+  }
+  #there must be more than one unique value of the independent variable
+  if (length(unique(pred)) <= 1) {
+    return(NULL)
+  }
+  #if using covariates add them as additional predictors to the model
+  if (!is.null(covars)) {
+    if (!is.data.frame(covars)) {
+      covars <- data.frame(covars)
+    }
+    combined <- covars[udata,, drop = FALSE]
+    combined[['pred']] <- pred
+    form <- as.formula(paste('~', paste0(colnames(combined), collapse = ' + ')))
+    design <- model.matrix(form, combined)
+    design <- design[, colSums(design) != 0, drop = FALSE]
+  } else {
+    design <- model.matrix(~pred)
+  }
+  if (!is.null(weights)) {
+    if (is.matrix(weights)) {
+      weights <- t(weights[udata,])
+    } else{
+      weights <- weights[udata]
+    }
+  }
+  fit <- limma::lmFit(t(mat[udata,]), design, weights = weights)
+  fit <- limma::eBayes(fit)
+  return(fit)
+}
 
 #' Estimate linear-model stats for a matrix of data using limma with empirical Bayes moderated t-stats for p-values
-#' Borrowed from CDS team's cdsr package.
+#' Adapted from CDS team's cdsr package.
 #'
 #' @param mat: Nxp data matrix with N cell lines and p genes
 #' @param vec: N vector of independent variables. Can be two-group labels as factors, bools, or can be numeric
@@ -1324,8 +1414,7 @@ run_lm_stats_limma <- function(mat, vec, covars = NULL, weights = NULL, target_t
     }
     return(one_sided_p)
   }
-  results %<>% set_colnames(revalue(colnames(.), c('logFC' = 'EffectSize', 'AveExpr' = 'Avg', 't' = 't_stat', 'B' = 'log_odds',
-                                                   'P.Value' = 'p.value', 'adj.P.Val' = 'q.value', 'min_samples' = 'min_samples'))) %>% na.omit()
+  results %<>% set_colnames(revalue(colnames(.), c('logFC' = 'EffectSize', 'AveExpr' = 'Avg', 't' = 't_stat', 'B' = 'log_odds', 'P.Value' = 'p.value', 'adj.P.Val' = 'q.value', 'min_samples' = 'min_samples'))) %>% na.omit()
   results %<>% dplyr::mutate(p.left = two_to_one_sided(p.value, EffectSize, 'left'),
                              p.right = two_to_one_sided(p.value, EffectSize, 'right'),
                              q.left = two_to_one_sided(q.value, EffectSize, 'left'),
