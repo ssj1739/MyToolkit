@@ -774,47 +774,17 @@ comparison_waterfallplot <- function(gene, annotate.by="tissue", annotate.gene=N
   
   
   if(annotate.by %in% c("mutation", "mut")){
-    ccle_binary <- as.data.frame(read_delim("~/Data/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
-                                            "\t", escape_double = FALSE, col_types = cols(Description = col_skip()), 
-                                            trim_ws = TRUE, skip = 2))
-    gene_annot <- ccle_binary[grep(glob2rx(paste0(annotate.gene, "*_MUT")), ccle_binary$Name),match(cls, colnames(ccle_binary), nomatch = 1)]
-    gene_annot <- apply(gene_annot, 2, function(x) any(as.logical(as.numeric(x))))
-    
-    
-    #ccle_mut_del <- load.from.taiga(data.name='ccle-mut-data-binary-matrix', data.version=1)
-    #ccle_mut_mis <- load.from.taiga(data.name='ccle-mis-mut-binary-matrix', data.version=1)
-    # a <- ccle_mut_del[match( cls, rownames(ccle_mut_del)), match(paste0(annotate.gene, "_", "DEL"), colnames(ccle_mut_del))]
-    # b <- ccle_mut_mis[match( cls, rownames(ccle_mut_mis)), match(gene, colnames(ccle_mut_mis))]
-    # gene_annot <- as.logical(a+b)
+    mutation <- load_data("mut", gene = annotate.gene)
+    gene_annot <- mutation[cls,]
+
   }else if(annotate.by %in% c("copy number", "cn", "cnv") ){
-    ccle_binary <- as.data.frame(read_delim("~/Data/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
-                                            "\t", escape_double = FALSE, col_types = cols(Description = col_skip()), 
-                                            trim_ws = TRUE, skip = 2))
-    
-    gene_annot <- ccle_binary[grep(glob2rx(paste0(annotate.gene, "*_AMP")), ccle_binary$Name),match(cls, colnames(ccle_binary), nomatch = 1)]
-    gene_annot <- apply(gene_annot, 2, function(x) any(as.logical(as.numeric(x))))
-    # ccle_copynumber <- t(load.from.taiga(data.name='ccle-copy-number-variants-hgnc-mapped', data.version=4))
-    # colnames(ccle_copynumber) <- sapply(colnames(ccle_copynumber), strsplit2, split=" ", n=1)
-    # gene_annot <- round(ccle_copynumber[match(cls, rownames(ccle_copynumber)), match(gene, colnames(ccle_copynumber))])
-  }else if(annotate.by %in% c("deletion", "del")){
-    ccle_binary <- as.data.frame(read_delim("~/Data/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
-                                            "\t", escape_double = FALSE, col_types = cols(Description = col_skip()), 
-                                            trim_ws = TRUE, skip = 2))
-    
-    gene_annot <- ccle_binary[grep(glob2rx(paste0(annotate.gene, "*_DEL")), ccle_binary$Name),match(cls, colnames(ccle_binary), nomatch = 1)]
-    gene_annot <- apply(gene_annot, 2, function(x) any(as.logical(as.numeric(x))))
-    
+    copynumber <- load_data("copynumber", gene = annotate.gene)
+    gene_annot <- copynumber[cls,]
+    color_by_discrete = F
   }else if(annotate.by %in% c("RNAseq", "expr", "expression")){
     expr <- load_data("RNAseq", gene=annotate.gene)
-    gene_annot <- expr[match(cls, names(expr), nomatch=NA)]
+    gene_annot <- expr[cls,]
     color_by_discrete=F
-  }else if(annotate.by %in% c('any', 'all')){
-    library(readr)
-    ccle_binary <- as.data.frame(read_delim("~/Data/CCLE_MUT_CNA_AMP_DEL_binary_Revealer.gct", 
-                                            "\t", escape_double = FALSE, col_types = cols(Description = col_skip()), 
-                                            trim_ws = TRUE, skip = 2))
-    gene_annot <- ccle_binary[grep(paste0(annotate.gene,"[[:punct:]]"), ccle_binary$Name),match(cls, colnames(ccle_binary), nomatch=1)]
-    gene_annot <- apply(gene_annot, 2, function(x) any(as.logical(as.numeric(x))))
   }else if(annotate.by %in% c('DRIVE', 'Achilles', 'CRISPR')){
     dep = load_data(type=annotate.by, gene=annotate.gene)
     gene_annot <- dep[match(cls, names(dep), nomatch = NA)]
@@ -829,14 +799,14 @@ comparison_waterfallplot <- function(gene, annotate.by="tissue", annotate.gene=N
   avana_scores=gene_effect_avana[match(cls, rownames(gene_effect_avana)),match(gene, colnames(gene_effect_avana))]
   achilles_scores=gene_effect_achilles[match(cls, rownames(gene_effect_achilles)),match(gene, colnames(gene_effect_achilles))]
   combined_scores=gene_effect_combined[match(cls, rownames(gene_effect_combined)),match(gene, colnames(gene_effect_combined))]
-  
+
   df <- data.frame(
     names=cls, 
     clean_names = sapply(cls, strsplit2, split="_", n=1),
-    drive_scores=ifelse(is.null(drive_scores), NA, drive_scores), 
-    avana_scores=ifelse(is.null(avana_scores), NA, avana_scores),
-    achilles_scores=ifelse(is.null(achilles_scores), NA, achilles_scores),
-    combined_scores=ifelse(is.null(combined_scores), NA, combined_scores),
+    drive_scores=drive_scores, 
+    avana_scores=avana_scores,
+    achilles_scores=achilles_scores,
+    combined_scores=combined_scores,
     context=gene_annot
   )
   
