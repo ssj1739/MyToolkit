@@ -1,0 +1,27 @@
+---
+title: "Sellers Lab Coding Style Guide"
+output: html_document
+date: "2/23/2018"
+author: "Sidharth Jain"
+---
+
+### Preface
+
+As a note, all reports and projects must be created in this (R Markdown) format.
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).
+
+# Introduction
+
+This is a style guide for the Sellers Lab.  All analyses, programming, or general work must be done according to the styles listed here.  
+
+### Notebook Template
