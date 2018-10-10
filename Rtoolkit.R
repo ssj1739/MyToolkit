@@ -87,7 +87,6 @@ write_gct <- function(X, file){
 
 loadConstants <- function(){
   if(!file.exists("~/Data/constants.RData")){
-    #CONSTANTS ---------------------------------------------------------------
     #Accessible by loadConstants function
     CRISPR <- load_data("CRISPR")
     COMBINED <- load_data("Combined")
@@ -139,10 +138,10 @@ load_data <- function(type, gene=NULL, cell_line=NULL, clean_features=T, clean_c
                  emt_signature = load.from.taiga(data.name='ccle-emt-score-b0da', quiet = T, ...),
                  gsea = load.from.taiga(data.name='ssgsea-enrichment-scores-for-msigdb-h-using-ccle-rnaseq-expression', quiet = T, transpose=T, ...),
                  gsea_hallmarks = load.from.taiga(data.name='ssgsea-enrichment-scores-for-msigdb-h-using-ccle-rnaseq-expression', quiet = T, transpose = T, ...),
-                 methylation = load.from.taiga(data.name='rrbs-4b29', quiet = T, ...),
-                 rrbs = load.from.taiga(data.name='rrbs-4b29', quiet = T, ...),
-                 metabolomics = load.from.taiga(data.name='metabolomics-cd0c', quiet = T, ...),
-                 metabolome = load.from.taiga(data.name='metabolomics-cd0c', quiet = T, ...),
+                 methylation = load.from.taiga(data.name='rrbs-4b29', data.file='CCLE_RRBS_TSS_1kb_20180614', quiet = T, ...),
+                 rrbs = load.from.taiga(data.name='rrbs-4b29', data.file='CCLE_RRBS_TSS_1kb_20180614', quiet = T, ...),
+                 metabolomics = load.from.taiga(data.name='metabolomics-cd0c', data.file='metabolomics', quiet = T, ...),
+                 metabolome = load.from.taiga(data.name='metabolomics-cd0c', data.file='metabolomics', quiet = T, ...),
                  demeter2 = load.from.taiga(data.name='demeter2-combined-dc9c', data.file='gene_means_proc', quiet = T, transpose=T, ...),
                  combined_demeter2 = load.from.taiga(data.name='demeter2-combined-dc9c', data.file='gene_means_proc', quiet = T, transpose=T, ...),
                  combined = load.from.taiga(data.name='demeter2-combined-dc9c', data.file='gene_means_proc', quiet = T, transpose = T, ...),
@@ -1604,7 +1603,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   if('gsea_hallmarks' %in% to){
     progress(updateProgress, status="gsea calculations", value=8/8)
     
-    gsea_hallmarks <- t(load.from.taiga(data.name='ssgsea-enrichment-scores-for-msigdb-h-using-ccle-rnaseq-expression', data.version=1))
+    gsea_hallmarks <- load_data("GSEA_hallmarks")
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(rownames(dependency_data[[x]]), rownames(gsea_hallmarks))
       if(length(cls)==0)
@@ -1624,7 +1623,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   if('protein' %in% to){
     progress(updateProgress, status="protein calculations", value=8/8)
     
-    protein <- load.from.taiga(data.name='ms-protein-a729', data.version=2)
+    protein <- load_data("MS")
     p <- lapply(names(dependency_data), function(x){
       cls <- intersect(rownames(dependency_data[[x]]), rownames(protein))
       if(length(cls)==0)
@@ -1639,22 +1638,6 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
       )
     })
     return_df <- rbind(return_df, bind_rows(p))
-    
-    # RPPA <- load_data("RPPA")
-    # p <- lapply(names(dependency_data), function(x){
-    #   cls <- intersect(rownames(dependency_data[[x]]), rownames(RPPA))
-    #   if(length(cls)==0)
-    #     return(NULL)
-    #   cc = cor(dependency_data[[x]][cls,], RPPA[cls,], use='pairwise.complete', method=method)
-    #   ii <- c(order(cc, decreasing = T)[1:k], order(cc, decreasing=F)[k:1])
-    #   data.frame(
-    #     genes = colnames(cc)[ii],
-    #     scores = cc[ii],
-    #     from = x,
-    #     to = "RPPA Protein"
-    #   )
-    # })
-    # return_df <- rbind(return_df, bind_rows(p))
   }
   
   
@@ -1694,7 +1677,7 @@ find_correlations_from_dependency <- function(gene=NULL, k=10, r_cutoff=0.1, fro
   return_df$isPropeller <- ifelse(return_df$genes %in% propeller_list, TRUE, FALSE)
   
   # Additional Annotation
-  return_df$annot <- annotate_genelist(return_df$genes, type = 'position')
+ # return_df$annot <- annotate_genelist(return_df$genes, type = 'position')
   
   return(return_df)
 }
@@ -1704,7 +1687,8 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
   require('dplyr')
   
   return_df <- data.frame()
-  dependency_data <- sapply(from, load_data, gene=gene)
+  dependency_data <- lapply(from, load_data, gene=gene)
+  names(dependency_data) <- from
 
   
   progress <- function(updateProgress, status, value){
@@ -1933,8 +1917,8 @@ find_lm_from_dependency <- function(gene, k=10, r_cutoff=0.1, from=c("DRIVE", "A
   return_df$isPropeller <- ifelse(return_df$genes %in% propeller_list, TRUE, FALSE)
   
   # Additional Annotation
-  progress(updateProgress, status="final calculations", value=8/8)
-  return_df$annot <- annotate_genelist(return_df$genes, type = 'position')
+  #progress(updateProgress, status="final calculations", value=8/8)
+  #return_df$annot <- annotate_genelist(return_df$genes, type = 'position')
   
   return(return_df)
 }
