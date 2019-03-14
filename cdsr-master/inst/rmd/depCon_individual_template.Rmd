@@ -1,0 +1,344 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+## `r envir$dset_name` {.tabset .tabset-fade .tabset-pills}
+
+```{r, include = FALSE}
+with(envir, {
+if (dset_name %in% c('Achilles RNAi', 'DRIVE RNAi', 'Comb RNAi', 'CRISPR')) {
+  target_info <- gene_info %>%
+   left_join(df_90_rank[[dset_name]], by = 'Gene')
+  if (dset_name %in% names(biomarker_info)) {
+   target_info %<>% left_join(biomarker_info[[dset_name]], by = 'Gene')
+  }
+  if(dset_name %in% names(gene_stats)) {
+    target_info %<>% left_join(gene_stats[[dset_name]], by = target_type)
+  }
+} else if (dset_name == 'PRISM') {
+  target_info <- PRISM_cmpd_info %>%
+   left_join(df_90_rank[[dset_name]], by = target_type)
+} else if (dset_name == 'GDSC') {
+  target_info <- GDSC_cmpd_info %>%
+   left_join(df_90_rank[[dset_name]], by = target_type)
+} else if (dset_name == 'CTD2') {
+  target_info <- CTD2_cmpd_info %>%
+   left_join(df_90_rank[[dset_name]], by = target_type)
+}
+
+res <- cdsr:::make_pref_dep_table(pref_dep_stats[[dset_name]], 
+                                  target_info, 
+                                  target_type, 
+                                  test_dir, 
+                                  max_pref_deps, 
+                                  min_show_top_deps,
+                                  q_thresh)
+if ('normLRT' %in% colnames(target_info)) {
+  res_normLRT <- cdsr:::make_pref_dep_table(pref_dep_stats[[dset_name]], 
+                                  target_info, 
+                                  target_type, 
+                                  test_dir, 
+                                  max_pref_deps, 
+                                  min_show_top_deps,
+                                  q_thresh = Inf,
+                                  normLRT_thresh = normLRT_thresh)
+} else {
+  res_normLRT <- NULL
+}
+})
+```
+
+### Preferential dependency table 
+
+```{r}
+with(envir, {
+if (target_type == 'Gene') {
+  tname <- target_type
+} else {
+  tname <- 'Compound'
+}
+})
+
+```
+
+**Found `r envir$res$n_pref_deps` `r envir$tname`s at q-value threshold of `r envir$q_thresh`**
+
+Showing top `r envir$res$n_rows_used` `r envir$tname`s
+
+Preferential dependencies are defined based on the mean difference between in-group and out-group CLs. Genes with significant mean-difference, and where in-group CLs are more dependent than out-group CLs are defined as preferential dependencies. Significance is assessed using empirical-Bayes moderated t-statistics (via the software package Limma). Q-values of `r envir$q_thresh` are considered significant.
+
+```{r}
+envir$res$tab
+```
+
+### normLRT dependency table 
+
+This table shows genes with normLRT scores > `r envir$normLRT_thresh`.
+
+```{r}
+envir$res_normLRT$tab
+```
+
+
+```{r, include = FALSE}
+with(envir, {
+cur_stats <- pref_dep_stats[[dset_name]] %>% 
+  left_join(target_info, by = target_type)
+if (test_dir == 'both') {
+    cur_stats %<>% mutate(esize = abs(EffectSize))
+  } else if (test_dir == 'left') {
+    cur_stats %<>% mutate(esize = -EffectSize)
+  } else {
+    cur_stats %<>% mutate(esize = EffectSize)
+  }
+if (target_type == 'broad_id') {
+  cur_stats %<>% mutate(broad_id = pert_iname) %>% 
+    dplyr::rename(Compound = broad_id)
+} else if (target_type == 'DRUG ID') {
+  cur_stats %<>% mutate(`DRUG ID` = `DRUG NAME`) %>% 
+    dplyr::rename(Compound = `DRUG ID`)
+} else if (target_type == 'master_cpd_id') {
+  cur_stats %<>% mutate(master_cpd_id = cpd_name) %>% 
+    dplyr::rename(Compound = master_cpd_id)
+}
+})
+```
+
+### Volcano plot
+Showing strength and significance of two-group comparison for each gene. Genes with drugs (according to Integrity database) are highlighted by color
+
+```{r, fig.width = 8, fig.height=6}
+with(envir, cdsr:::make_volcano_plot(cur_stats, test_dir, n_targ_label = n_targ_label, target_type = target_type, q_thresh = q_thresh))
+```
+
+### Distribution of cell line features by lineage
+
+```{r, fig.width = 7, fig.height = 5}
+with(envir, {
+  df <- dat$sample_info %>% 
+  filter(CCLE_ID %in% common_CLs) %>% 
+  left_join(data.frame(CCLE_ID = names(CL_var), CL_var = CL_var), by = 'CCLE_ID')
+lin_ord <- df %>% filter(!is.na(lineage)) %>% dplyr::group_by(lineage) %>% dplyr::summarise(n = n()) %>% dplyr::arrange(dplyr::desc(n)) %>% .[['lineage']]
+df %<>% mutate(lineage = factor(lineage, levels = lin_ord))
+
+if (length(unique(CL_var[!is.na(CL_var)])) == 2) {
+  ggplot(df %>% filter(!is.na(lineage)), 
+         aes(x = lineage, fill = CL_var)) + 
+    geom_histogram(stat = 'count') +
+    cdsr:::theme_Publication() +
+    cdsr:::scale_fill_Publication() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+} else {
+  ggplot(df %>% filter(!is.na(lineage)),
+         aes(x = lineage, y = CL_var)) + 
+    geom_boxplot(alpha = 0.5, outlier.shape = NA) +
+    geom_jitter(alpha = 0.5, size = 1, width = 0.1) +
+    cdsr:::theme_Publication() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+}
+})
+```
+
+### Pref-vs-LRT
+
+```{r, fig.width = 8, fig.height=6}
+with(envir, {
+if (target_type %in% c('broad_id', 'DRUG ID', 'master_cpd_id')) {
+  cur_target_type <- 'Compound'
+} else {
+  cur_target_type <- target_type
+}
+  if ('normLRT' %in% colnames(cur_stats)) {
+ggplot(cur_stats, aes(EffectSize, normLRT)) + 
+  geom_point(aes(color = q_val < q_thresh), alpha = 0.75) + 
+  geom_hline(yintercept = normLRT_thresh, linetype = 'dashed') +
+  geom_text_repel(data = cur_stats %>% 
+                    filter(normLRT > normLRT_thresh) %>% 
+                    arrange(dplyr::desc(esize)) %>% 
+                    head(n_targ_label),
+                  aes_string('label' = cur_target_type),
+                  size = 3) +
+  ylab('normLRT')  +
+  guides(color = guide_legend(title = 'sig')) +
+  cdsr:::theme_Publication() +
+  cdsr:::scale_colour_Publication()
+  }
+})
+```
+
+
+### Pref-vs-common essentiality
+
+```{r, fig.width = 8, fig.height=6}
+with(envir, {
+if (target_type %in% c('broad_id', 'DRUG ID', 'master_cpd_id')) {
+  cur_target_type <- 'Compound'
+} else {
+  cur_target_type <- target_type
+}
+ggplot(cur_stats, aes(EffectSize, deprank_90perc)) + 
+  geom_point(aes(color = q_val < q_thresh), alpha = 0.75) + 
+  geom_hline(yintercept = 0.2, linetype = 'dashed') +
+  geom_text_repel(data = cur_stats %>% 
+                    arrange(dplyr::desc(esize)) %>% 
+                    head(n_targ_label),
+                  aes_string('label' = cur_target_type),
+                  size = 3) +
+  ylab('90th percentile dependency rank')  +
+  guides(color = guide_legend(title = 'sig')) +
+  cdsr:::theme_Publication() +
+  cdsr:::scale_colour_Publication() 
+})
+```
+
+```{r, fig.width = 8, fig.height=6}
+with(envir, {
+if (target_type %in% c('broad_id', 'DRUG ID', 'master_cpd_id')) {
+  cur_target_type <- 'Compound'
+} else {
+  cur_target_type <- target_type
+}
+if ('frac_FDR_deps' %in% colnames(cur_stats)) {
+  ggplot(cur_stats, aes(EffectSize, frac_FDR_deps)) + 
+    geom_jitter(aes(color = q_val < q_thresh), alpha = 0.75, width = 0, height = 0.01) + 
+    geom_hline(yintercept = 0.2, linetype = 'dashed') +
+    geom_text_repel(data = cur_stats %>% 
+                      arrange(dplyr::desc(esize)) %>% 
+                      head(n_targ_label),
+                    aes_string('label' = cur_target_type),
+                    size = 3) +
+    ylab('Fraction CLs dependent')  +
+    guides(color = guide_legend(title = 'sig')) +
+    cdsr:::theme_Publication() +
+    cdsr:::scale_colour_Publication() 
+}
+})
+```
+
+
+
+### Pref-vs-biomarker
+
+```{r, fig.width = 8, fig.height=6}
+with(envir, {
+if ('overall_auc' %in% colnames(cur_stats)) {
+ggplot(cur_stats, aes(EffectSize, overall_auc)) + 
+  geom_point(aes(color = q_val < q_thresh), alpha = 0.75) + 
+  geom_hline(yintercept = biomarker_auc_thresh, linetype = 'dashed') +
+  geom_text_repel(data = cur_stats %>% 
+                    arrange(dplyr::desc(esize)) %>% 
+                    head(n_targ_label),
+                  aes_string('label' = cur_target_type),
+                  size = 3) +
+  ylab('Predictive model AUC')  +
+  guides(color = guide_legend(title = 'sig')) +
+  cdsr:::theme_Publication() +
+  cdsr:::scale_colour_Publication()
+}
+})
+```
+
+
+### Top Co-dependency clusters
+Graph visualization of dependency-correlations among top `r envir$n_codep_genes` dependencies. Edges are shown between genes with significant correlation. Node size indicates the strength of preferential dependency (mean diff). Colors show dependency groups identified by community detection algorithm
+
+```{r, fig.width = 10, fig.height = 10}
+with(envir, {
+  top_gene_stats <- pref_dep_stats[[dset_name]] %>%
+  arrange(q_val) %>%
+  head(n_codep_genes)
+# top_gene_stats$target <- top_gene_stats[[target_type]]
+if (dset_name %in% c('PRISM', 'GDSC', 'CTD2')) {
+  top_gene_stats %<>% left_join(target_info, by = target_type) 
+}
+cdsr:::make_network_target_vis(top_gene_stats, cur_dep_mat, target_type = target_type)
+})
+```
+
+### GSA {.tabset .tabset-fade}
+
+```{r}
+with(envir, {
+if (target_type == 'broad_id') {
+  target_gs <- c('Rep_moa', 'Rep_target')
+} else if (target_type == 'DRUG ID') {
+    target_gs <- c('GDSC_target', 'GDSC_target_pathway')
+} else if (target_type == 'master_cpd_id') {
+    target_gs <- c('CTD2_target', 'CTD2_moa')
+} else {
+  target_gs <- used_gscs
+}
+})
+```
+
+```{r, include = FALSE}
+with(envir, {
+  gsea_res <- list()
+  all_genes <- list()
+  X <- cur_dep_mat[common_CLs,]
+  Y <- CL_var[common_CLs]
+  if (!is.null(covars)) {
+    #project covars from each column of X and from Y
+     Z <- covars[common_CLs]
+     if (is.vector(Z)) {
+         Z <- data.frame(matrix(Z, ncol=1))
+        colnames(Z) <- 'cov'
+     }
+     Z <- model.matrix(as.formula(paste0('~0 + ', paste(colnames(Z), collapse = '+'))), Z)
+    if (nproc > 0) {
+      library(plyr)
+      library(doMC)
+      doMC::registerDoMC(cores=nproc)
+      X <- plyr::aaply(X, 2, function(col) {
+        ncol <- rep(NA, length(col))
+        ncol[!is.na(col)] <- resid(lm(col ~ Z))
+        return(ncol)
+      }, .parallel=TRUE) %>% t()
+    } else {
+      X <- apply(X, 2, function(col) {
+        ncol <- rep(NA, length(col))
+        ncol[!is.na(col)] <- resid(lm(col ~ Z))
+        return(ncol)
+      })
+    }
+    Y <- resid(lm(Y ~ Z))
+  }
+  for (gs_name in target_gs) {
+    if (!is.null(pref_dep_stats[[dset_name]])) {
+      print(gs_name)
+      invisible(gsea_res[[gs_name]] <- cdsr:::get_gsea_results(
+                                                    X, 
+                                                    Y, 
+                                                    gsc = gsc_data[[gs_name]], 
+                                                    covars = NULL, 
+                                                    test_dir,
+                                                    target_type))
+      if (rank_gs_by_NES) {
+        gsea_res[[gs_name]] %<>% 
+          filter(q_val < q_thresh) %>% 
+          arrange(dplyr::desc(norm_enrich_stat))
+      }
+    }
+    all_genes[[gs_name]] <- pref_dep_stats[[dset_name]][[target_type]]
+    if (target_type == 'broad_id') {
+      all_genes[[gs_name]] %<>% str_sub(1,13) %>% make.names()
+    } else if (target_type == 'DRUG ID') {
+      all_genes[[gs_name]] <-  paste0("ID", all_genes[[gs_name]])
+    }
+  }
+})
+```
+
+```{r, include = FALSE}
+cur_out <- NULL
+for (gs_name in envir$target_gs) {
+  envir$gs_name <- gs_name
+  cur_out <- c(cur_out, knit_child(system.file("rmd/depCon_gs_template.Rmd", package="cdsr"), envir = envir))
+}
+```
+
+`r paste(cur_out, collapse='\n')`
+

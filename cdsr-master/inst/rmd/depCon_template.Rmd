@@ -1,0 +1,692 @@
+---
+output:
+  html_document:
+    toc: false
+    # toc_depth: 2
+    # toc_float: true
+params:
+   report_title: "Dependency report"
+   CL_var: c()
+   test_dir: 'left'
+   covars: NULL
+   used_gscs: NULL
+   pref_deps_file: NULL
+   nproc: 0
+title: "`r params$report_title`"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(plyr); 
+library(magrittr); 
+library(reshape2)
+library(stringr)
+library(readr)
+library(tibble)
+library(dplyr)
+library(taigr)
+library(ggplot2)
+library(ggrepel)
+library(knitr)
+library(DT)
+library(VennDiagram)
+library(cdsr)
+
+CL_var <- params$CL_var
+covars <- params$covars
+test_dir <- params$test_dir
+if (is.null(params$used_gscs)) {
+  used_gscs <- c('hallmark', 'GO_biological_process', 'GO_molecular_function', 'canonical', 'KEGG', 'CORUM')
+} else {
+  used_gscs <- params$used_gscs
+}
+nproc <- params$nproc
+pref_deps_file <- params$pref_deps_file
+
+#if CL_var is given as one-column matrix, convert to named vector
+if (is.matrix(CL_var)) {
+  stopifnot(ncol(CL_var) == 1)
+  CL_var <- CL_var[, 1]
+}
+CL_var <- CL_var[!is.na(CL_var)]
+#if input is binary convert to boolean
+if (all(unique(CL_var) %in% c(0,1))) {
+  CL_var <- CL_var == 1
+}
+#if inputs are provided as string boolean
+if (all(unique(CL_var[!is.na(CL_var)]) %in% c('1', '0'))) {
+  CL_var <- as.numeric(CL_var)
+}
+is_two_group <- is.logical(CL_var)
+if (!is.null(covars)) {
+  covars <- covars[!is.na(covars)]
+}
+
+#define params
+q_thresh <- 0.2 #FDR sig threshold 
+biomark_cor_thresh <- 0.25 #pearson cor threshold for calling good biomarker
+biomarker_auc_thresh <- 0.7 #auc threshold for calling good biomarker
+
+min_CLs_per_group <- 3 #for two group comparisons, require at least this many CLs in each group
+
+fdr_thresh <- 0.1 #threshold on FDR
+normLRT_thresh <- 100 #threshold on normLRT
+pref_dep_thresh <- -2 #threshold on ZMAD preferential dependency score
+
+rank_gs_by_NES <- TRUE #take only gene sets with significant FDR, and rank by NES (otherwise rank by pval)
+max_pref_deps <- 250 #max number of top pref deps to show
+min_show_top_deps <- 10 #min number of pref deps to show (if there are none meeting significance thresh)
+n_targ_label <- 30 #number of top pref deps to label in plots
+n_codep_genes <- 50 #number of top pref deps to used (based on significance) for constructing co-dep network vis
+n_top_gs <- 50 #number of top gene sets to show in table, and use in network viz
+
+target_dsets <- c('Achilles RNAi', 'DRIVE RNAi', 'Comb RNAi', 'CRISPR', 'PRISM', 'GDSC', 'CTD2')
+
+#define dataset info
+data_info <- list(
+  GE = list(
+    data.name = 'rnaseq-log2-rpkm-expression-entrez-id--31c8',
+    data.version = 3,
+    data.file = NA,
+    transpose = F),
+  RNAi_Comb_GS = list( 
+    data.name='demeter2-combined-dc9c',
+    data.version=5,
+    data.file = 'gene_means_proc',
+    transpose = T),
+  RNAi_Comb_SE = list( 
+    data.name='demeter2-combined-dc9c',
+    data.version=5,
+    data.file = 'gene_SDs_proc',
+    transpose = T),
+  RNAi_Ach_GS = list( 
+    data.name='demeter2-achilles-5386',
+    data.version=8,
+    data.file = 'gene_means_proc',
+    transpose = T),
+  RNAi_Ach_SE = list( 
+    data.name='demeter2-achilles-5386',
+    data.version=8,
+    data.file = 'gene_SDs_proc',
+    transpose = T),
+  RNAi_Ach_FDR = list( 
+    data.name='demeter2-achilles-5386',
+    data.version=8,
+    data.file = 'gene_fdr',
+    transpose = F),
+  RNAi_DRIVE_GS = list(
+    data.name = 'demeter2-drive-0591',
+    data.version = 4,
+    data.file = 'gene_means_proc',
+    transpose = T),
+  RNAi_DRIVE_SE = list(
+    data.name = 'demeter2-drive-0591',
+    data.version = 4,
+    data.file = 'gene_SDs_proc',
+    transpose = T),
+  CRISPR = list(
+    data.name='avana-564b', 
+    data.version=20, 
+    data.file='gene_effect',
+    transpose = F),
+  CRISPR_FDR = list(
+    data.name='avana-564b', 
+    data.version=20, 
+    data.file='gene_fdr',
+    transpose = F),
+  PRISM = list(
+    data.name = 'repurposing-pr500-redetection-auc-b1c7',
+    data.version = 3,
+    data.file = 'mx_CMap_FCPC_AUC',
+    transpose = F),
+  GDSC_AUC = list(
+    data.name = 'gdsc-auc-ccle-aligned',
+    data.version = 1,
+    data.file = NA,
+    transpose = F),
+  CTD2_AUC = list(
+    data.name = 'ctrp-v2-auc',
+    data.version = 1,
+    data.file = NA,
+    transpose = T),
+  sample_info = list(
+    data.name='cell-lines-found-by-dataset-b427', 
+    data.version=7,
+    data.file = NA,
+    transpose = F),
+  gene_drug_info = list(
+    data.name='targets-v2-0-counts-09a5', 
+    data.version=2,
+    data.file = NA,
+    transpose = F),
+  Comb_RNAi_biomarker = list(
+    data.name = 'demeter2-combined-539e',
+    data.version = 3,
+    data.file = 'summary',
+    transpose = F),
+  Ach_RNAi_biomarker = list(
+    data.name = 'demeter2-achilles-b15d',
+    data.version = 3,
+    data.file = 'summary',
+    transpose = F),
+ DRIVE_RNAi_biomarker = list(
+    data.name = 'demeter2-drive-0f5a',
+    data.version = 3,
+    data.file = 'summary',
+    transpose = F),
+  CRISPR_biomarker = list(
+    data.name = 'avana-broad-18q1-ee39',
+    data.version = 3,
+    data.file = 'summary',
+    transpose = F),
+  PRISM_annot = list(
+    data.name = 'prism-repurposing-compounds-annotation',
+    data.version = 2,
+    data.file = NA,
+    transpose = F),
+  gdsc_annot = list(
+    data.name = 'gdsc-compound-annotations', 
+    data.version = 2,
+    data.file = NA,
+    transpose = F),
+  CTD2_annot = list(
+    data.name = 'ctd2-compound-annotations',
+    data.version = 1,
+    data.file = NA,
+    transpose = F),
+  gene_data = list(
+    data.name = 'hugo-gene-data',
+    data.version = 1,
+    data.file = NA,
+    transpose = F),
+  established_targets = list(
+    data.name = 'established-targets-f6ef',
+    data.version = 1,
+    data.file = NA,
+    transpose = F),
+  gene_stats = list(
+    data.name = 'gene-distribution-stats-137d',
+    data.version = 1,
+    data.file = NA,
+    transpose = F)
+)
+```
+
+```{r, include = FALSE}
+data_info_ <- data_info %>% 
+  lapply(function(x) {
+    if (is.na(x$data.file)) {
+      x$data.file = NULL
+    }
+    return(x)
+})
+dat <- load.all.from.taiga(data_info_)
+
+#process sample_info table
+colnames(dat$sample_info)[1] <- 'CCLE_ID'
+dat$sample_info %<>% dplyr::select(-lineage) %>% 
+    dplyr::rename(lineage = `Lineage (for CDS)`) %>% 
+    mutate(lineage = ifelse(lineage == '', NA, lineage))
+
+#convert column names from Symbol (ID) to  Symbol
+to_gene_names <- c('GE', 'RNAi_Comb_GS', 'RNAi_Comb_SE', 'RNAi_Ach_GS', 'RNAi_Ach_SE', 'RNAi_DRIVE_GS', 'RNAi_DRIVE_SE', 'CRISPR', 'CRISPR_FDR', 'RNAi_Ach_FDR')
+dat[to_gene_names] %<>% lapply(function(d) {
+    colnames(d) <- str_match(colnames(d), '^(.+) \\(')[,2]
+    return(d)
+  })
+
+# #first column is superfluous for biomarker results
+# dat$Ach_RNAi_biomarker %<>% .[, c(2:ncol(.))]
+# dat$CRISPR_biomarker %<>% .[, c(2:ncol(.))]
+
+dat$gdsc_annot %<>% mutate(`DRUG ID` = as.character(`DRUG ID`))
+dat$CTD2_annot %<>% mutate(master_cpd_id = as.character(master_cpd_id))
+
+#convert to list (first entry gets put as column header)
+dat$established_targets <- c(colnames(dat$established_targets), dat$established_targets[,1])
+
+#load gsc objects
+gsc_data <- read_rds(download.raw.from.taiga(data.name='msigdb-gene-set-collections-8453', data.version=1))
+
+```
+
+# Overview {.tabset .tabset-fade}
+
+## Approach
+
+This report tries to identify genetic and chemical vulnerabilities associated with a given cell line feature (either a two-group comparison, or a continuous cell line feature). For each dependency dataset, interesting genes/compounds are identified primarily using linear-model analysis. For a two-group comparison this is essentially a t-test for each gene/compound, and for continuous cell line features it measures something more like a correlation to each dependency profile.
+
+Dependencies that are most strongly associated with the specified phenotype are identified and displayed as tables, and plots. We also identify genetic dependencies that are associated with the phenotype in multiple datasets, providing additional support for those results.
+
+Additional information about each gene/compound is incorporated as well, such as:
+
+* Does the gene/compound have a good predictive biomarker?
+* Does the gene/compound have an 'interesting' distribution of dependencies across cell lines
+* Is the gene annotated as having some compound targeting it?
+* Is the gene identified as pan-essential?
+* Compound annotations (target, MOA) where available.
+
+Analysis is also performed at the gene-set level, to identify gene (or compound) sets which are enriched for association with the specified cell lines feature.
+
+Network visualizations are also employed at the gene and gene set level to illustrate the relationship among genes and genesets which are strongly associated with the phenotype
+
+## Datasets
+
+The analysis is applied to several different dependency datasets:
+
+* **Achilles RNAi**: RNAi knockdown screen across `r nrow(dat$RNAi_Ach_GS)` cell lines, targeting `r ncol(dat$RNAi_Ach_GS)` genes
+* **DRIVE RNAi**: RNAi knockdown screen across `r nrow(dat$RNAi_DRIVE_GS)` cell lines, `r ncol(dat$RNAi_DRIVE_GS)` targeting genes
+* **CRISPR**: CRISPR knockout screen across `r nrow(dat$CRISPR)` cell lines, `r ncol(dat$CRISPR)` targeting genes
+* **PRISM Repurposing**: PRISM secondary dose-responses screen of `r ncol(dat$Repurposing_AUC)` compounds in the drug Repurposing library across `r nrow(dat$Repurposing_AUC)` cell lines. Values represent area-under the dose response curve
+* **GDSC**: Sanger GDSC screen of `r ncol(dat$GDSC_AUC)` compounds across `r nrow(dat$GDSC_AUC)` cell lines. Values represent area-under the dose response curve
+* **CTD2**: CTD2 screen of `r ncol(dat$CTD2_AUC)` compounds across `r nrow(dat$CTD2_AUC)` cell lines. Values represent area-under the dose response curve
+
+**Detailed info for the datasets used** 
+
+```{r}
+as.data.frame(matrix(unlist(data_info), nrow = length(unlist(data_info[1])))) %>% 
+  set_colnames(names(data_info)) %>% 
+  set_rownames(names(data_info[[1]])) %>% 
+  t() %>% 
+  data.frame() %>% 
+  rownames_to_column(var = 'dset') %>% 
+  mutate(data.name = cdsr:::create_link_taiga_page(data.name, data.version)) %>% 
+  dplyr::select(-transpose) %>% 
+  kable()
+```
+
+## Output
+
+The results are divided into sections. The first section **Common preferential dependencies** summarizes genetic dependencies that are common to the Achilles RNAi, DRIVE RNAi, and CRISPR datasets.
+
+There are then sections for each individual dependency dataset, summarizing their dependencies most strongly associated with the specified cell line feature. Each of these dataset-specific sections has the following sub-sections:
+
+* **Preferential dependency table**: Table of top associated dependencies. Filtered by q-value threshold, ranked by effect size.
+* **normLRT dependency table**: Table of top associated dependencies, among those that have high normLRT scores (a global measure of how non-Gaussian the distribution is). This table shows which, among the set of globally interesting genes/compounds, were most associated with the phenotype
+* **Volcano plot**: Plot of effect size vs significance across genes
+* **Distribution of cell line features by lineage**: Shows representation of cell lines in each dataset broken down by lineage and the specified cell line feature
+* **Pref-vs-LRT** Plot of 'effectsize' (association of dependency with cell line feature) vs normLRT score (measure of how interesting the dependency distribution is)
+* **Pref-vs-common essentiality** Plot of 'effectsize' (association of dependency with cell line feature) vs how 'common essential' each gene/compound is.
+* **Pref-vs-biomarker**: Plot of effectsize vs strength of biomarker, if data is available
+* **Top Co-dependency clusters**: Network visualization showing relationships among top-associated dependencies
+* **GSA**: Gene set analysis of associated dependencies. For each gene set collection specified, will generate a table of top related gene sets, as well as a network visualization showing how top gene sets are related to one another (in terms of their composition)
+
+## Data dictionary
+
+* **EffectSize**: Strength of association between CL feature and dependency. For two-group comparisons this is the mean difference. For continuous features it's basically the covariance.
+* **Pear_cor**: Pearson correlation coefficient between CL feature and dependency
+* **q_val**: FDR-corrected p-value for association 
+* **p_val**: p-value for association
+* **in_group_mean_dep**: (two-group comparisons only): average dependency score for 'in-group' cell lines
+* **frac_FDR_deps**: Fraction of cell lines called dependent (FDR < `r fdr_thresh`)
+* **in_group_frac_FDR_deps**: (two-group comparison only): Fraction of in-group cell lines called dependent (FDR < `r fdr_thresh`)
+* **in_group_pref_dep_frac**: (two-group comparison only): Fraction of in-group cell lines that are strong preferential deps (ZMAD < `r pref_dep_thresh`)
+* **num_in_group_CLs**: (two-group comparison only): Number of in-group cell lines with available data
+* **deprank_90perc**: Measure of how common-essential each gene is. Scores less than ~0.2 should be considered common-essential.
+* **established_target**: Is the gene a target already being worked on.
+* **best_model**: An ensemble of predictive models is fit to each dependency profile, and this is the class of the best performing model for the gene
+* **overall_auc**: ROC AUC, a measure of classification accuracy, assessing the accuracy of predicting dependent cell lines, using the best model.
+* **overall_pearson**: Pearson correlation coefficient of the predicted dependencies using the best model
+* **best_overall_feature**: Most important predictive feature from the model that looks across all features
+* **best_related_feature**: Most important predictive feature of model using only features of 'related' genes
+* **top_genes** (GSA): For gene set analysis, this lists the top most associated genes in each set.
+* **has_drugs**: Does the gene have any drugs annotated as targeting it in a proprietary database of drug targets. Marked as either 'none', 'in dev', or 'in clin trials'
+* **normLRT**: Measure of how interesting each distribution of dependencies (across cell lines) is. Specifically, it's a measure of how non-Gaussian each distribution is. Values > 100 are generally genes with interesting selective killing profiles.
+
+
+
+```{r, include = FALSE}
+#-----------compile gene-level data
+
+#make table indicating whether or not each gene has a drug targeting it
+drug_target_info <- data.frame(
+    drugs_in_clinical_trial = rowSums(
+      dat$gene_drug_info[, c('Phase 0', 'Phase I', 'Phase I/II', 'Phase II', 'Phase II/III', 'Phase III', 
+                          'IND Filed', 'Pre-Registered', 'Recommended Approval', 'Registered', 'Launched', 'Clinical')]) > 0,
+    has_any_drugs = rowSums(dat$gene_drug_info) > 0
+) %>% rownames_to_column(var = 'Gene') %>% 
+  mutate(has_drugs = 'none',
+         has_drugs = ifelse(has_any_drugs, 'in dev', has_drugs),
+         has_drugs = ifelse(drugs_in_clinical_trial, 'in clin trials', has_drugs)) %>% 
+  dplyr::select(Gene, has_drugs)
+
+#process and merge biomarker model info into list of dfs
+biomarker_info <- list(
+  `Achilles RNAi` = cdsr:::proc_gene_biomarker_data(dat$Ach_RNAi_biomarker),
+  `DRIVE RNAi` = cdsr:::proc_gene_biomarker_data(dat$DRIVE_RNAi_biomarker),
+  `Comb RNAi` = cdsr:::proc_gene_biomarker_data(dat$Comb_RNAi_biomarker),
+  CRISPR = cdsr:::proc_gene_biomarker_data(dat$CRISPR_biomarker)
+)
+
+#estimate measures of common essentialness for each dataset
+df_90_rank <- list(
+  CRISPR = cdsr:::get_df_90_rank(dat$CRISPR, 'Gene'),
+  `Achilles RNAi` = cdsr:::get_df_90_rank(dat$RNAi_Ach_GS, 'Gene'),
+  `DRIVE RNAi` = cdsr:::get_df_90_rank(dat$RNAi_DRIVE_GS, 'Gene'),
+  `Comb RNAi` = cdsr:::get_df_90_rank(dat$RNAi_Comb_GS, 'Gene'),
+  PRISM = cdsr:::get_df_90_rank(dat$PRISM, 'broad_id'),
+  GDSC = cdsr:::get_df_90_rank(dat$GDSC_AUC, 'DRUG ID'),
+  CTD2 = cdsr:::get_df_90_rank(dat$CTD2_AUC, 'master_cpd_id')
+  )
+
+gene_stats <- dat$gene_stats %>% 
+  mutate(dset = c(CRISPR = 'CRISPR', 
+                  RNAi_Ach = 'Achilles RNAi', 
+                  RNAi_DRIVE = 'DRIVE RNAi',
+                  RNAi_comb = 'Comb RNAi')[dset]) %>% 
+  dlply(.(dset), function(df) {
+    df %>% dplyr::select(Gene, normLRT) %>% 
+      mutate(Gene = str_match(Gene, '(.+) ')[,2])})
+
+#merge into single gene info dataframe
+gene_info <- dat$gene_data %>% 
+  dplyr::select(Gene = `Approved Symbol`,
+                `Gene Name` = `Approved Name`, 
+                Chromosome) %>% 
+  left_join(drug_target_info, by = 'Gene') %>% 
+  mutate(established_target = Gene %in% dat$established_targets)
+
+PRISM_cmpd_info <- dat$PRISM_annot %>% 
+  dplyr::select(broad_id, pert_iname, clinical_phase, moa, target) 
+
+GDSC_cmpd_info <- dat$gdsc_annot
+
+CTD2_cmpd_info <- dat$CTD2_annot %>% 
+  dplyr::select(master_cpd_id, cpd_name, target = gene_symbol_of_protein_target, 
+                moa = target_or_activity_of_compound) 
+
+colnames(dat$CTD2_AUC) <- str_match(colnames(dat$CTD2_AUC), ' \\((\\d+)\\)')[,2]
+```
+
+
+# Results {.tabset .tabset-fade}
+
+```{r, include = FALSE}
+dset_tables <- list(
+  `Achilles RNAi` = list(dep_mat = dat$RNAi_Ach_GS,
+                  dep_SE = dat$RNAi_Ach_SE,
+                  dep_fdr = dat$RNAi_Ach_FDR,
+                  target_type = 'Gene'),
+  `DRIVE RNAi` = list(dep_mat = dat$RNAi_DRIVE_GS,
+                  dep_SE = dat$RNAi_DRIVE_SE,
+                  target_type = 'Gene'),
+  `Comb RNAi` = list(dep_mat = dat$RNAi_Comb_GS,
+                  dep_SE = dat$RNAi_Comb_SE,
+                  target_type = 'Gene'),
+  CRISPR = list(dep_mat = dat$CRISPR,
+                dep_SE = NULL,
+                dep_fdr = dat$CRISPR_FDR,
+                target_type = 'Gene'),
+  PRISM = list(dep_mat = dat$PRISM,
+                dep_SE = NULL,
+                target_type = 'broad_id'),
+  GDSC = list(dep_mat = dat$GDSC_AUC,
+                dep_SE = NULL,
+                target_type = 'DRUG ID'),
+  CTD2 = list(dep_mat = dat$CTD2_AUC,
+                dep_SE = NULL,
+                target_type = 'master_cpd_id')
+  )
+
+#if doing a two-group comparison, compute the zmad normalized preferential dep per gene
+if (is_two_group) {
+  dset_tables_pref <- llply(dset_tables, function(dset) {
+    scale(dset$dep_mat, 
+          center = apply(dset$dep_mat, 2, median, na.rm=T),
+          scale = apply(dset$dep_mat, 2, mad, na.rm=T))
+  })
+}
+
+pref_dep_stats <- list()
+
+for (dset_name in target_dsets) {
+  print(dset_name)
+   cur_dep_mat <- dset_tables[[dset_name]]$dep_mat
+   cur_dep_SE <- dset_tables[[dset_name]]$dep_SE
+   cur_dep_FDR <- dset_tables[[dset_name]]$dep_fdr
+     pref_dep_stats[[dset_name]] <- tryCatch({cdsr:::get_limma_stats(cur_dep_mat, CL_var, covars, cur_dep_SE, dset_tables[[dset_name]]$target_type, test_dir = test_dir)},
+                                             error = function(e) return(NULL))
+   if (!is.null(cur_dep_FDR)) {
+      FDR_deps <- colSums(cur_dep_FDR < fdr_thresh, na.rm=T) %>% 
+        magrittr::divide_by(colSums(!is.na(cur_dep_FDR))) %>% 
+        as.data.frame() %>% 
+        set_colnames(c('frac_FDR_deps')) %>% 
+        rownames_to_column(var = dset_tables[[dset_name]]$target_type)
+   } else {
+     FDR_deps <- NULL
+   }
+   if (is_two_group) {
+    in_group_CLs <- intersect(names(CL_var)[CL_var], rownames(cur_dep_mat))
+    out_group_CLs <- intersect(names(CL_var)[!CL_var], rownames(cur_dep_mat))
+    if (!is.null(cur_dep_FDR)) {
+      FDR_deps$in_group_frac_FDR_deps <- colSums(cur_dep_FDR[in_group_CLs, ,drop=FALSE] < fdr_thresh, na.rm=T) %>% 
+        magrittr::divide_by(colSums(!is.na(cur_dep_FDR[in_group_CLs, , drop=FALSE])))
+    }
+    if (length(in_group_CLs) < min_CLs_per_group | length(out_group_CLs) < min_CLs_per_group) {
+      pref_dep_stats[[dset_name]] <- data.frame(
+          EffectSize = numeric(),
+          q_val = numeric(),
+          p_val = numeric()
+      )
+      pref_dep_stats[[dset_name]][dset_tables[[dset_name]]$target_type] <- character()
+    }
+    in_group_deps <- data.frame(
+      in_group_mean_dep = colMeans(cur_dep_mat[in_group_CLs,,drop=FALSE], na.rm=T),
+      in_group_pref_dep_frac = colSums(dset_tables_pref[[dset_name]][in_group_CLs,,drop = FALSE] < pref_dep_thresh, na.rm=T) %>% 
+        magrittr::divide_by(colSums(!is.na(dset_tables_pref[[dset_name]][in_group_CLs, , drop=FALSE]))),
+      num_in_group_CLs = colSums(!is.na(cur_dep_mat[in_group_CLs,,drop = FALSE]))
+    )
+    in_group_deps[[dset_tables[[dset_name]]$target_type]] <- colnames(cur_dep_mat)
+    # in_group_deps <- colMeans(cur_dep_mat[in_group_CLs,,drop=FALSE], na.rm=TRUE) %>% 
+    #   as.data.frame() %>% 
+    #   set_colnames(c('in_group_mean_dep')) %>% 
+    #   rownames_to_column(var = dset_tables[[dset_name]]$target_type)
+    pref_dep_stats[[dset_name]] %<>% left_join(
+      in_group_deps, by = dset_tables[[dset_name]]$target_type)
+   }
+     if (!is.null(FDR_deps)) {
+       pref_dep_stats[[dset_name]] %<>% left_join(
+          FDR_deps, by = dset_tables[[dset_name]]$target_type)
+     }
+}
+if (!is.null(pref_deps_file)) {
+  write_rds(pref_dep_stats, pref_deps_file)
+}
+```
+
+## Common preferential dependencies {.tabset .tabset-fade .tabset-pills}
+
+```{r, include = FALSE}
+
+df_Achilles <- pref_dep_stats$`Achilles RNAi`
+colnames(df_Achilles)[colnames(df_Achilles) != 'Gene'] %<>% paste0('_Achilles')
+df_CRISPR <- pref_dep_stats$CRISPR
+colnames(df_CRISPR)[colnames(df_CRISPR) != 'Gene'] %<>% paste0('_CRISPR')
+df_DRIVE <- pref_dep_stats$`DRIVE RNAi`
+colnames(df_DRIVE)[colnames(df_DRIVE) != 'Gene'] %<>% paste0('_DRIVE')
+df_Comb <- pref_dep_stats$`Comb RNAi`
+colnames(df_Comb)[colnames(df_Comb) != 'Gene'] %<>% paste0('_Combined')
+
+comb <- join_all(list(df_Achilles, df_CRISPR, df_DRIVE, df_Comb), type = 'full', by = 'Gene')
+ 
+```
+
+### Venn Diagram
+
+```{r, fig.width = 6, fig.height = 6}
+gene_pref_deps <- list(
+  Achilles = pref_dep_stats$`Achilles RNAi` %>% 
+    filter(q_val < q_thresh) %>% 
+    .[['Gene']],
+  DRIVE = pref_dep_stats$`DRIVE RNAi` %>% 
+    filter(q_val < q_thresh) %>% 
+    .[['Gene']],
+  CRISPR = pref_dep_stats$CRISPR %>% 
+    filter(q_val < q_thresh) %>% 
+    .[['Gene']]
+)
+all_genes <- Reduce(union, lapply(names(pref_dep_stats), function(x) {
+  pref_dep_stats[[x]]$Gene
+}))
+
+a <- limma::vennCounts(cbind(
+  `RNAi Achilles` = all_genes %in% gene_pref_deps$Achilles,
+  `RNAi DRIVE` = all_genes %in% gene_pref_deps$DRIVE,
+  CRISPR = all_genes %in% gene_pref_deps$CRISPR
+))
+limma::vennDiagram(a, circle.col = c("darkorange", 'darkgreen', "darkblue"))
+```
+
+### Table of common genetic deps
+
+```{r}
+df_tb <- comb %>% 
+  mutate(pref_dep_CRISPR = ifelse(q_val_CRISPR < q_thresh, 1, 0),
+         pref_dep_Achilles = ifelse(q_val_Achilles < q_thresh, 1, 0),
+         pref_dep_DRIVE = ifelse(q_val_DRIVE < q_thresh, 1, 0),
+         pref_dep_Combined = ifelse(q_val_Combined < q_thresh, 1, 0),
+         p_val_Achilles = cdsr:::format_sci_not(p_val_Achilles, digits = 2),
+         p_val_DRIVE = cdsr:::format_sci_not(p_val_DRIVE, digits = 2),
+         p_val_CRISPR = cdsr:::format_sci_not(p_val_CRISPR, digits = 2), 
+         p_val_Combined = cdsr:::format_sci_not(p_val_Combined, digits = 2)) %>% 
+  arrange(dplyr::desc(abs(EffectSize_Achilles) + abs(EffectSize_DRIVE) + abs(EffectSize_CRISPR) + abs(EffectSize_Combined)))
+df_tb$n_dsets_pref <- rowSums(df_tb[, c('pref_dep_CRISPR', 
+                                        'pref_dep_Achilles', 
+                                        'pref_dep_DRIVE'
+                                        # 'pref_dep_Combined'
+                                        )], na.rm=T)
+df_tb <- rbind(df_tb[df_tb$n_dsets_pref == 3,], df_tb[df_tb$n_dsets_pref == 2,])
+  
+df_tb %<>% 
+  dplyr::select(Gene, EffectSize_Achilles, EffectSize_DRIVE, EffectSize_CRISPR, EffectSize_Combined,
+                p_val_Achilles, p_val_DRIVE, p_val_CRISPR, p_val_Combined,
+                pref_dep_Achilles, pref_dep_DRIVE, pref_dep_CRISPR, pref_dep_Combined) %>% 
+  left_join(gene_info, by = 'Gene') %>% 
+  mutate(Gene = cdsr:::create_link_gene_page(Gene))
+
+DT::datatable(df_tb,
+      options = list(lengthMenu = c(5, 10, 25, 50, 100), 
+                     pageLength = 25,
+                     columnDefs = list(list(targets = c(8,9,10), visible = FALSE))),
+      rownames = TRUE, filter = 'top', escape = FALSE) %>%       
+  DT::formatRound(grep('EffectSize', colnames(df_tb), value = TRUE), 3) %>% 
+  DT::formatStyle(columns = c('EffectSize_Achilles', 'EffectSize_DRIVE', 'EffectSize_CRISPR', 'EffectSize_Combined'),
+                  valueColumns = c('pref_dep_Achilles', 'pref_dep_DRIVE', 'pref_dep_CRISPR', 'pref_dep_Combined'),
+                  backgroundColor = styleEqual(c(0, 1), c('none', 'yellow'))
+)
+
+
+```
+
+### CRISPR - Combined_RNAi
+
+```{r, fig.width = 7, fig.height = 7}
+comb %<>% mutate(
+  sig = 'none',
+  sig = ifelse(q_val_Combined < q_thresh, 'Combined', sig),
+  sig = ifelse(q_val_CRISPR < q_thresh, 'CRISPR', sig),
+  sig = ifelse(q_val_CRISPR < q_thresh & q_val_Combined < q_thresh, 'both', sig)
+)
+ggplot(comb %>% filter(!is.na(sig)), 
+       aes(EffectSize_Combined, EffectSize_CRISPR)) + 
+  geom_point(data = filter(comb, sig == 'none'), color = 'black', size = 0.75, alpha = 0.5) +
+  geom_point(data = filter(comb, sig != 'none'), aes(color = sig), size = 1.5, alpha = 0.75) +
+  geom_text_repel(data = filter(comb, sig != 'none') %>% 
+                    arrange(dplyr::desc(abs(EffectSize_Combined) + abs(EffectSize_CRISPR))) %>% 
+                    head(n_targ_label),
+                  aes(label = Gene, color = sig),
+                  size = 2.5) +
+  cdsr:::theme_Publication() +
+  cdsr:::scale_colour_Publication() 
+```
+
+
+### CRISPR - Achilles_RNAi
+
+```{r, fig.width = 7, fig.height = 7}
+comb %<>% mutate(
+  sig = 'none',
+  sig = ifelse(q_val_Achilles < q_thresh, 'Achilles', sig),
+  sig = ifelse(q_val_CRISPR < q_thresh, 'CRISPR', sig),
+  sig = ifelse(q_val_CRISPR < q_thresh & q_val_Achilles < q_thresh, 'both', sig)
+)
+ggplot(comb %>% filter(!is.na(sig)), 
+       aes(EffectSize_Achilles, EffectSize_CRISPR)) + 
+  geom_point(data = filter(comb, sig == 'none'), color = 'black', size = 0.75, alpha = 0.5) +
+  geom_point(data = filter(comb, sig != 'none'), aes(color = sig), size = 1.5, alpha = 0.75) +
+  geom_text_repel(data = filter(comb, sig != 'none') %>% 
+                    arrange(dplyr::desc(abs(EffectSize_Achilles) + abs(EffectSize_CRISPR))) %>% 
+                    head(n_targ_label),
+                  aes(label = Gene, color = sig),
+                  size = 2.5) +
+  cdsr:::theme_Publication() +
+  cdsr:::scale_colour_Publication() 
+```
+
+### CRISPR - DRIVE_RNAi
+
+```{r, fig.width = 7, fig.height = 7}
+comb %<>% mutate(
+  sig = 'none',
+  sig = ifelse(q_val_DRIVE < q_thresh, 'DRIVE', sig),
+  sig = ifelse(q_val_CRISPR < q_thresh, 'CRISPR', sig),
+  sig = ifelse(q_val_CRISPR < q_thresh & q_val_DRIVE < q_thresh, 'both', sig)
+)
+ggplot(comb %>% filter(!is.na(sig)), 
+       aes(EffectSize_DRIVE, EffectSize_CRISPR)) + 
+  geom_point(data = filter(comb, sig == 'none'), color = 'black', size = 0.75, alpha = 0.5) +
+  geom_point(data = filter(comb, sig != 'none'), aes(color = sig), size = 1.5, alpha = 0.75) +
+  geom_text_repel(data = filter(comb, sig != 'none') %>% 
+                    arrange(dplyr::desc(abs(EffectSize_DRIVE) + abs(EffectSize_CRISPR))) %>% 
+                    head(n_targ_label),
+                  aes(label = Gene, color = sig),
+                  size = 2.5) +
+  cdsr:::theme_Publication() +
+  cdsr:::scale_colour_Publication() 
+```
+
+### Achilles_RNAi - DRIVE_RNAi
+
+```{r, fig.width = 7, fig.height = 7}
+comb %<>% mutate(
+  sig = 'none',
+  sig = ifelse(q_val_DRIVE < q_thresh, 'DRIVE', sig),
+  sig = ifelse(q_val_Achilles < q_thresh, 'Achilles', sig),
+  sig = ifelse(q_val_Achilles < q_thresh & q_val_DRIVE < q_thresh, 'both', sig)
+)
+ggplot(comb %>% filter(!is.na(sig)), 
+       aes(EffectSize_DRIVE, EffectSize_Achilles)) + 
+  geom_point(data = filter(comb, sig == 'none'), color = 'black', size = 0.75, alpha = 0.5) +
+  geom_point(data = filter(comb, sig != 'none'), aes(color = sig), size = 1.5, alpha = 0.75) +
+  geom_text_repel(data = filter(comb, sig != 'none') %>% 
+                    arrange(dplyr::desc(abs(EffectSize_DRIVE) + abs(EffectSize_Achilles))) %>% 
+                    head(n_targ_label),
+                  aes(label = Gene, color = sig),
+                  size = 2.5) +
+  cdsr:::theme_Publication() +
+  cdsr:::scale_colour_Publication() 
+```
+
+
+```{r, include = FALSE}
+out <- NULL
+for (dset_name in target_dsets) {
+  cur_dep_mat <- dset_tables[[dset_name]]$dep_mat
+  cur_dep_SE <- dset_tables[[dset_name]]$dep_SE
+  target_type <- dset_tables[[dset_name]]$target_type
+  common_CLs <- intersect(names(CL_var), rownames(cur_dep_mat))
+  if (!is.null(covars)) {
+    common_CLs %<>% intersect(names(covars))
+  }
+  if (nrow(pref_dep_stats[[dset_name]]) > 0) {
+  out <- c(out, knit_child(system.file("rmd/depCon_individual_template.Rmd", package="cdsr"), envir = parent.frame()))
+  # out <- c(out, knit_child('depCon_individual_template.Rmd',
+  #                          envir=parent.frame()))
+  }
+}
+```
+
+`r paste(out, collapse='\n')`

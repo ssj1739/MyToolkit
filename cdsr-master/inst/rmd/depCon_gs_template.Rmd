@@ -1,0 +1,35 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+#### `r gs_name`
+
+```{r, include = TRUE}
+DT::datatable(gsea_res[[gs_name]] %>% head(n_top_gs),
+                options = list(lengthMenu = c(5, 10, 25, 50, 100),
+                               pageLength = 10,
+                               rownames = FALSE,
+                               filter = 'top',
+                               escape = FALSE))
+```
+
+```{r, fig.width = 10, fig.height = 10}
+if (rank_gs_by_NES) {
+  gsea_res[[gs_name]] %<>% mutate(stat = norm_enrich_stat)
+} else {
+  gsea_res[[gs_name]] %<>% mutate(stat = -log10(p_val))
+}
+if (nrow(gsea_res[[gs_name]]) >= 3) {
+  cdsr::make_GSA_network(gsea_res[[gs_name]],
+           gsc = gsc_data[[gs_name]],
+           all_genes = all_genes[[gs_name]],
+           top_N = n_top_gs,
+           one_per_cluster = FALSE,
+           min_cluster_size = 2,
+           vertex.label.cex = 0.5)
+}
+```
+

@@ -1,0 +1,39 @@
+Package: cdsr
+Title: Cancer Data Science R Toolbox
+Version: 0.0.0.9000
+Authors@R: c(person("Jordan", "Bryan", email = "jbryan@broadinstitute.org", role = c("aut", "cre")))
+Description: This package is an R toolbox for the Cancer Data Science (CDS) team at The Broad Institute of MIT and Harvard. The scripts included here are meant to address common-use operations and synchronize the team's R vocabulary.
+Depends: R (>= 3.3.0)
+Imports: 
+  cowplot,
+  dplyr,
+  DT,
+  igraph,
+  fgsea,
+  ggplot2,
+  ggrepel,
+  GSEABase,
+  knitr,
+  limma,
+  magrittr,
+  Matrix,
+  MASS,
+  piano,
+  philentropy,
+  plyr,
+  readr,
+  rlang,
+  rmarkdown,
+  sn,
+  stringr,
+  taigr,
+  tibble,
+  tidyr,
+  VennDiagram
+Suggests:
+  npGSEAm,
+  snowfall
+License: What license is it under?
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 6.0.1.9000
